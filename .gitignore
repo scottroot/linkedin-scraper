@@ -5,3 +5,4 @@ _archive/
 linkedin_cookies.json
 .DS_Store
 __pycache__/
+*.old*

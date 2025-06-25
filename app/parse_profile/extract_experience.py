@@ -1,73 +1,36 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+# This module takes company names found on LinkedIn and compares them to a target company name
 import time
-import re
-import json
-import os
-from fuzzywuzzy import fuzz
-from linkedin_scraper.find_urls import get_linkedin_url_candidates
-from linkedin_scraper.driver_and_login import get_driver, login
-from linkedin_scraper.check_company import check_company_match, fuzzy_match_company
-
-
-def wait_for_page_load(driver, timeout=20):
-    """Wait for the page to be fully loaded using multiple strategies"""
-    try:
-        # Wait for basic page structure
-        WebDriverWait(driver, timeout).until(
-            EC.presence_of_element_located((By.TAG_NAME, "main"))
-        )
-
-        # Wait for profile-specific elements (try multiple selectors)
-        profile_selectors = [
-            ".pv-text-details__left-panel",
-            ".ph5.pb5",
-            ".pv-profile-section",
-            "[data-view-name='profile-card']",
-            ".artdeco-card"
-        ]
-
-        for selector in profile_selectors:
-            try:
-                WebDriverWait(driver, 5).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, selector))
-                )
-                # print(f"Found element with selector: {selector}")
-                return True
-            except TimeoutException:
-                continue
-
-        # If none of the specific selectors work, just wait a bit more
-        time.sleep(5)
-        return True
-
-    except TimeoutException:
-        print("Page failed to load within timeout period")
-        return False
+from selenium.webdriver.common.by import By
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from app.driver_and_login import get_driver, login, cleanup_driver
 
 
 def find_experience_section(driver):
     """Try multiple strategies to find the experience section"""
-
     # Common selectors for experience sections
+    # TODO: verify i can just use artdeco-card...
     experience_selectors = [
-        "section[data-view-name='profile-card']",
-        "section[id*='experience']",
-        "section[aria-labelledby*='experience']",
-        ".pv-profile-section.experience-section",
-        ".pvs-list",
-        ".artdeco-card.pv-profile-section"
+        # Primary selectors for experience sections
+        # "section[data-view-name='profile-card']",
+        # "section[id*='experience']",
+        # "section[aria-labelledby*='experience']",
+        # ".pv-profile-section.experience-section",
+        # ".pvs-list",
+        # ".artdeco-card.pv-profile-section",
+        # # New LinkedIn selectors
+        # "[data-section='experience']",
+        # ".pvs-profile-content section",
+        # ".scaffold-finite-scroll section",
+        # # Generic section selectors
+        # "section",
+        ".artdeco-card"
     ]
 
     for selector in experience_selectors:
         try:
             elements = driver.find_elements(By.CSS_SELECTOR, selector)
             if elements:
-                # print(f"Found experience section with selector: {selector}")
+                print(f"Found experience section with selector: {selector}")
                 return elements
         except Exception as e:
             print(f"Error with selector {selector}: {e}")
@@ -75,19 +38,37 @@ def find_experience_section(driver):
 
     # If no specific selectors work, try finding by text content
     try:
+        print("Trying to find sections by text content...")
         sections = driver.find_elements(By.TAG_NAME, "section")
         for section in sections:
-            if "experience" in section.get_attribute("innerHTML").lower():
-                print("Found experience section by text content")
-                return [section]
+            try:
+                section_text = section.get_attribute("innerHTML").lower()
+                if "experience" in section_text or "work" in section_text or "employment" in section_text:
+                    print("Found experience section by text content")
+                    return [section]
+            except Exception as e:
+                continue
     except Exception as e:
         print(f"Error searching by text content: {e}")
+
+    # Last resort: try to find any content that might contain experience info
+    try:
+        print("Trying to find any content sections...")
+        all_sections = driver.find_elements(By.CSS_SELECTOR, "section, .artdeco-card, .pvs-list")
+        if all_sections:
+            print(f"Found {len(all_sections)} potential sections, returning first few")
+            return all_sections[:3]  # Return first 3 sections as potential experience sections
+    except Exception as e:
+        print(f"Error in last resort search: {e}")
 
     return []
 
 
 def extract_position_info(item):
-    """Extract position information from a job item"""
+    """
+    Extract position information from a job item.
+    Used by get_current_employer()
+    """
     position_info = {
         "job_title": "",
         "company": "",
@@ -102,14 +83,21 @@ def extract_position_info(item):
             ".t-bold span[aria-hidden='true']",
             "h3 span[aria-hidden='true']",
             ".pvs-entity__path-node span[aria-hidden='true']",
-            ".t-16.t-black.t-bold"
+            ".t-16.t-black.t-bold",
+            ".pvs-entity__path-node",
+            ".t-bold",
+            "h3",
+            ".pvs-list__item--line-separated .t-bold",
+            ".pvs-entity__path-node .t-bold"
         ]
 
         for selector in title_selectors:
             try:
                 title_element = item.find_element(By.CSS_SELECTOR, selector)
-                position_info["job_title"] = title_element.text.strip()
-                break
+                title_text = title_element.text.strip()
+                if title_text:
+                    position_info["job_title"] = title_text
+                    break
             except NoSuchElementException:
                 continue
 
@@ -117,7 +105,11 @@ def extract_position_info(item):
         company_selectors = [
             ".t-14.t-normal span[aria-hidden='true']",
             ".t-14.t-black--light span[aria-hidden='true']",
-            ".pvs-entity__caption-wrapper"
+            ".pvs-entity__caption-wrapper",
+            ".t-14.t-normal",
+            ".t-14.t-black--light",
+            ".pvs-entity__caption-wrapper span",
+            ".pvs-list__item--line-separated .t-14"
         ]
 
         for selector in company_selectors:
@@ -131,6 +123,9 @@ def extract_position_info(item):
                         if len(company_parts) > 1:
                             position_info["employment_type"] = company_parts[1].strip()
                         break
+                    elif company_text and not position_info["company"]:
+                        # If no bullet separator, just use the text as company
+                        position_info["company"] = company_text
                 if position_info["company"]:
                     break
             except NoSuchElementException:
@@ -140,7 +135,10 @@ def extract_position_info(item):
         date_selectors = [
             ".pvs-entity__caption-wrapper",
             ".t-14.t-black--light.t-normal",
-            ".pv-entity__bullet-item-v2"
+            ".pv-entity__bullet-item-v2",
+            ".t-14.t-black--light",
+            ".pvs-entity__caption-wrapper span",
+            ".pvs-list__item--line-separated .t-14"
         ]
 
         for selector in date_selectors:
@@ -148,7 +146,7 @@ def extract_position_info(item):
                 date_elements = item.find_elements(By.CSS_SELECTOR, selector)
                 for date_element in date_elements:
                     date_text = date_element.text.strip().lower()
-                    if any(word in date_text for word in ["present", "current", "now"]):
+                    if any(word in date_text for word in ["present", "current", "now", "today"]):
                         position_info["date_range"] = date_element.text.strip()
                         position_info["is_current"] = True
                         break
@@ -159,6 +157,13 @@ def extract_position_info(item):
                     break
             except NoSuchElementException:
                 continue
+
+        # If we still don't have a date range, try to infer if it's current
+        if not position_info["date_range"] and position_info["job_title"]:
+            # Check if the item itself suggests it's current (e.g., no end date visible)
+            item_text = item.text.lower()
+            if "present" in item_text or "current" in item_text:
+                position_info["is_current"] = True
 
     except Exception as e:
         print(f"Error extracting position info: {e}")
@@ -198,6 +203,7 @@ def get_current_employer(profile_url, verbose=False):
             print("Page loaded successfully, looking for experience section...")
 
         # Additional wait for dynamic content
+        print("Waiting 3 seconds for dynamic content to fully load...")
         time.sleep(3)
 
         current_positions = []
@@ -227,7 +233,12 @@ def get_current_employer(profile_url, verbose=False):
                 "li.artdeco-list__item",
                 ".pvs-list__item",
                 ".pv-entity__position-group-pager",
-                ".pv-profile-section__list-item"
+                ".pv-profile-section__list-item",
+                ".pvs-list__item--line-separated",
+                ".pvs-entity",
+                ".artdeco-list__item",
+                "li",
+                ".pvs-list__item--with-top-padding"
             ]
 
             experience_items = []
@@ -236,8 +247,7 @@ def get_current_employer(profile_url, verbose=False):
                     items = section.find_elements(By.CSS_SELECTOR, selector)
                     if items:
                         experience_items = items
-                        if verbose:
-                            print(f"Found {len(items)} experience items with selector: {selector}")
+                        print(f"Found {len(items)} experience items with selector: {selector}")
                         break
                 except Exception as e:
                     continue
@@ -281,133 +291,4 @@ def get_current_employer(profile_url, verbose=False):
         return []
 
     finally:
-        driver.quit()
-
-
-def get_current_employer_with_matching(profile_url, target_company, threshold=75, verbose=False):
-    """
-    Extract current employer from LinkedIn profile URL and check for company match
-
-    Args:
-        profile_url (str): LinkedIn profile URL
-        target_company (str): Company name to match against
-        email (str, optional): LinkedIn login email
-        password (str, optional): LinkedIn login password
-        threshold (int): Minimum similarity score for fuzzy matching
-        verbose (bool): If True, show detailed output. If False, suppress output
-
-    Returns:
-        dict: Results including positions and match information
-    """
-
-    current_positions = get_current_employer(profile_url, verbose=verbose)
-
-    if not current_positions:
-        return {
-            'current_positions': [],
-            'company_match': {
-                'has_match': False,
-                'best_match': None,
-                'all_matches': []
-            }
-        }
-
-    # Check for company matches
-    match_result = check_company_match(target_company, current_positions, threshold)
-
-    return {
-        'current_positions': current_positions,
-        'company_match': match_result
-    }
-
-
-def is_employed_at_company(name, company, threshold=75, max_profiles=3, verbose=False):
-    """
-    Main function: Check if a person is currently employed at a specific company
-
-    Args:
-        name (str): Person's full name
-        company (str): Company name to check
-        threshold (int): Minimum similarity score for company name matching (0-100)
-        max_profiles (int): Maximum number of LinkedIn profiles to check
-        verbose (bool): If True, show detailed output. If False, only show final result
-
-    Returns:
-        bool: True if person is employed at the company, False otherwise
-    """
-    if verbose:
-        print(f"Checking if {name} is employed at {company}")
-        print("=" * 60)
-
-    # Get LinkedIn profile candidates
-    profile_urls = get_linkedin_url_candidates(name, company, limit=max_profiles)
-
-    if not profile_urls:
-        if verbose:
-            print("No LinkedIn profiles found")
-        return False
-
-    if verbose:
-        print(f"Found {len(profile_urls)} LinkedIn profile(s)")
-
-    # Check each profile until we find a match
-    for i, profile_url in enumerate(profile_urls):
-        if verbose:
-            print(f"\nChecking profile {i+1}/{len(profile_urls)}: {profile_url}")
-            print("-" * 50)
-
-        try:
-            # Get current positions with company matching
-            result = get_current_employer_with_matching(
-                profile_url,
-                company,
-                threshold=threshold,
-                verbose=verbose
-            )
-
-            current_positions = result['current_positions']
-            company_match = result['company_match']
-
-            if company_match['has_match']:
-                if verbose:
-                    best_match = company_match['best_match']
-                    match_result = best_match['match_result']
-                    position = best_match['position']
-
-                    print(f"✅ MATCH FOUND!")
-                    print(f"Position: {position['job_title']}")
-                    print(f"Company: {position['company']}")
-                    print(f"Match Score: {match_result['score']}/100")
-                    print(f"Match Type: {match_result['match_type']}")
-
-                return True
-            else:
-                if verbose:
-                    print("❌ No company match found in this profile")
-
-                    if current_positions:
-                        print("Current positions found:")
-                        for pos in current_positions:
-                            if pos.get('company'):
-                                match_result = fuzzy_match_company(company, pos['company'])
-                                print(f"  - {pos['job_title']} at {pos['company']} (Score: {match_result['score']})")
-
-        except Exception as e:
-            if verbose:
-                print(f"Error processing profile {i+1}: {e}")
-            continue
-
-    if verbose:
-        print(f"\n❌ No employment match found for {name} at {company}")
-    return False
-
-
-if __name__ == "__main__":
-
-    target_company = "GK Software SE"
-    target_name = "Abril M Tenorio"
-
-
-    is_employed = is_employed_at_company(target_name, target_company)
-
-    print(is_employed)
+        cleanup_driver(driver)

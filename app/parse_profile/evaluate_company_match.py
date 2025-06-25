@@ -1,4 +1,3 @@
-# This module takes company names found on LinkedIn and compares them to a target company name
 import re
 from fuzzywuzzy import fuzz
 
@@ -148,3 +147,4 @@ def check_company_match(target_company, current_positions, threshold=75):
         'best_match': best_match,
         'all_matches': all_matches
     }
+
