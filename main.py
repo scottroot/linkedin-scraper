@@ -407,8 +407,8 @@ def main():
                        help='Maximum number of rows to consider (including already processed ones)')
     parser.add_argument('--batch-size', type=int, default=5,
                        help='Number of contacts to process before saving (default: 5)')
-    parser.add_argument('--delay', type=int, default=30,
-                       help='Seconds to wait between batches (default: 30)')
+    parser.add_argument('--delay', type=int, default=5,
+                       help='Seconds to wait between batches (default: 5)')
 
     args = parser.parse_args()
 
