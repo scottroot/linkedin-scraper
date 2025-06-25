@@ -16,7 +16,8 @@ from PySide6.QtGui import QFont, QTextCursor
 import pandas as pd
 
 # Import the main processing functions
-from app.check_company import process_contacts_batch
+from app.main import process_contacts_batch
+from app.logger import get_logger
 
 
 class MessageProcessor(QThread):
@@ -30,6 +31,7 @@ class MessageProcessor(QThread):
         super().__init__()
         self.message_queue = message_queue
         self.running = True
+        self.logger = get_logger()
 
     def run(self):
         while self.running:
@@ -49,7 +51,7 @@ class MessageProcessor(QThread):
                 # This is expected - no messages in queue, continue checking
                 continue
             except Exception as e:
-                print(f"Error processing messages: {e}")
+                self.logger.error(f"Error processing messages: {e}")
 
     def stop(self):
         self.running = False
@@ -84,6 +86,9 @@ class LinkedInScraperGUI(QMainWindow):
         self.message_processor.error_signal.connect(self.show_error)
         self.message_processor.finished_signal.connect(self.finish_processing)
         self.message_processor.start()
+
+        # Logger
+        self.logger = get_logger()
 
         self.setup_ui()
 
@@ -288,7 +293,6 @@ class LinkedInScraperGUI(QMainWindow):
 
             if validation_result['is_valid']:
                 self.process_button.setEnabled(True)
-                QMessageBox.information(self, "Success", "CSV file loaded and validated successfully!")
             else:
                 self.process_button.setEnabled(False)
                 QMessageBox.warning(self, "Warning", "CSV structure has issues. Please check the file information below.")
@@ -438,25 +442,32 @@ class LinkedInScraperGUI(QMainWindow):
 
             # Process contacts
             self.thread_safe_log("Starting LinkedIn contact validation...")
+            self.logger.info("Starting LinkedIn contact validation...")
             self.thread_safe_log(f"Processing {len(working_df)} contacts")
+            self.logger.info(f"Processing {len(working_df)} contacts")
             self.thread_safe_log(f"Batch size: {self.batch_size_spin.value()}")
+            self.logger.info(f"Batch size: {self.batch_size_spin.value()}")
             self.thread_safe_log(f"Delay between batches: {self.delay_spin.value()} seconds")
+            self.logger.info(f"Delay between batches: {self.delay_spin.value()} seconds")
             self.thread_safe_log("=" * 50)
+            self.logger.info("=" * 50)
 
             # Define save callback
             def save_progress(df):
                 try:
                     df.to_csv(output_file, index=False)
                     self.thread_safe_log(f"Progress saved to: {output_file}")
+                    self.logger.info(f"Progress saved to: {output_file}")
                 except Exception as e:
                     self.thread_safe_log(f"Error saving progress: {e}")
+                    self.logger.error(f"Error saving progress: {e}")
 
             # Call the processing function with callbacks
             processed_df = process_contacts_batch(
                 working_df,
                 batch_size=self.batch_size_spin.value(),
                 delay_between_batches=self.delay_spin.value(),
-                log_callback=self.thread_safe_log,  # Use thread-safe logging
+                log_callback=self.thread_safe_log,  # Use thread-safe logging for GUI
                 save_callback=save_progress,
                 stop_flag=self.stop_event
             )
@@ -466,10 +477,14 @@ class LinkedInScraperGUI(QMainWindow):
                 processed_df.to_csv(output_file, index=False)
             except Exception as e:
                 self.thread_safe_log(f"Error saving final results: {e}")
+                self.logger.error(f"Error saving final results: {e}")
 
             self.thread_safe_log("=" * 50)
+            self.logger.info("=" * 50)
             self.thread_safe_log(f"Processing completed!")
+            self.logger.info(f"Processing completed!")
             self.thread_safe_log(f"Results saved to: {output_file}")
+            self.logger.info(f"Results saved to: {output_file}")
 
             # Show completion message
             self.thread_safe_success(f"Processing completed!\nResults saved to:\n{output_file}")
@@ -477,6 +492,7 @@ class LinkedInScraperGUI(QMainWindow):
         except Exception as e:
             error_msg = f"Error during processing: {str(e)}"
             self.thread_safe_log(error_msg)
+            self.logger.error(error_msg)
             self.thread_safe_error(error_msg)
 
         finally:
@@ -488,28 +504,28 @@ class LinkedInScraperGUI(QMainWindow):
         try:
             self.message_queue.put(("log", message))
         except Exception as e:
-            print(f"Error queuing log message: {e}")
+            self.logger.error(f"Error queuing log message: {e}")
 
     def thread_safe_success(self, message):
         """Thread-safe success message"""
         try:
             self.message_queue.put(("success", message))
         except Exception as e:
-            print(f"Error queuing success message: {e}")
+            self.logger.error(f"Error queuing success message: {e}")
 
     def thread_safe_error(self, message):
         """Thread-safe error message"""
         try:
             self.message_queue.put(("error", message))
         except Exception as e:
-            print(f"Error queuing error message: {e}")
+            self.logger.error(f"Error queuing error message: {e}")
 
     def thread_safe_finish(self):
         """Thread-safe finish signal"""
         try:
             self.message_queue.put(("finished", None))
         except Exception as e:
-            print(f"Error queuing finish message: {e}")
+            self.logger.error(f"Error queuing finish message: {e}")
 
     def append_log(self, message):
         """Append message to progress text (called from main thread)"""
@@ -549,6 +565,7 @@ class LinkedInScraperGUI(QMainWindow):
             self.stop_processing_flag = True
             self.stop_event.set()
             self.thread_safe_log("Stopping processing... Please wait for current operation to complete.")
+            self.logger.info("Stopping processing... Please wait for current operation to complete.")
             self.stop_button.setEnabled(False)
 
     def closeEvent(self, event):
@@ -557,6 +574,15 @@ class LinkedInScraperGUI(QMainWindow):
             self.message_processor.stop()
             self.message_processor.wait()
         event.accept()
+
+    def showEvent(self, event):
+        """Override showEvent to ensure window takes focus when shown"""
+        super().showEvent(event)
+        # Bring window to front and take focus
+        self.raise_()
+        self.activateWindow()
+        # Set focus to the first input field
+        self.input_file_edit.setFocus()
 
 def main():
     try:
@@ -568,9 +594,14 @@ def main():
         window = LinkedInScraperGUI()
         window.show()
 
+        # Ensure window takes focus
+        window.raise_()
+        window.activateWindow()
+
         sys.exit(app.exec())
     except Exception as e:
-        print(f"Fatal error in GUI: {e}")
+        logger = get_logger()
+        logger.error(f"Fatal error in GUI: {e}")
         # Try to show error in a simple message box if possible
         try:
             msg_box = QMessageBox()
@@ -579,7 +610,7 @@ def main():
             msg_box.setText(f"The application encountered a fatal error:\n{e}")
             msg_box.exec()
         except:
-            print("Could not show error dialog")
+            logger.error("Could not show error dialog")
 
 if __name__ == "__main__":
     main()

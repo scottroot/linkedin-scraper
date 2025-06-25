@@ -1,4 +1,5 @@
 import re
+from typing import Any, Dict, Literal
 from fuzzywuzzy import fuzz
 
 
@@ -100,7 +101,11 @@ def fuzzy_match_company(target_company, discovered_company, threshold=75):
     }
 
 
-def check_company_match(target_company, current_positions, threshold=75):
+def check_company_match(
+    target_company,
+    current_positions,
+    threshold=75
+) -> Dict[Literal['has_match', 'best_match', 'all_matches'], Any]:
     """
     Check if any of the current positions match the target company
 
@@ -111,6 +116,11 @@ def check_company_match(target_company, current_positions, threshold=75):
 
     Returns:
         dict: Best match information
+            {
+                'has_match': bool,
+                'best_match': dict,
+                'all_matches': list
+            }
     """
     if not current_positions:
         return {

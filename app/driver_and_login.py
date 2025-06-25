@@ -4,10 +4,12 @@ from selenium.common.exceptions import WebDriverException
 import json
 import os
 import gc
+from app.logger import get_logger
 
 
 def get_driver(headless=False):
     """Initialize and configure Chrome WebDriver with better error handling"""
+    logger = get_logger()
     try:
         chrome_options = Options()
         if headless:
@@ -37,22 +39,23 @@ def get_driver(headless=False):
         # Set page load timeout
         driver.set_page_load_timeout(30)
         driver.implicitly_wait(10)
-        print("Setting -> page load timeout = 30 seconds; implicit wait for element = 10 seconds")
+        logger.info("Setting -> page load timeout = 30 seconds; implicit wait for element = 10 seconds")
 
         return driver
 
     except WebDriverException as e:
-        print(f"WebDriver initialization error: {e}")
+        logger.error(f"WebDriver initialization error: {e}")
         raise
     except Exception as e:
-        print(f"Unexpected error initializing WebDriver: {e}")
+        logger.error(f"Unexpected error initializing WebDriver: {e}")
         raise
 
 
 def login(driver):
     """Handle LinkedIn login with cookie management and better error handling"""
+    logger = get_logger()
     try:
-        print("Please log in manually in the browser window.")
+        logger.info("Please log in manually in the browser window.")
         driver.get("https://www.linkedin.com")
 
         # Load existing cookies if available
@@ -68,17 +71,17 @@ def login(driver):
                         try:
                             driver.add_cookie(cookie)
                         except Exception as cookie_error:
-                            print(f"Error adding cookie: {cookie_error}")
+                            logger.error(f"Error adding cookie: {cookie_error}")
                             continue
             except Exception as e:
-                print(f"Error loading cookies: {e}")
+                logger.error(f"Error loading cookies: {e}")
 
         driver.get("https://www.linkedin.com/login")
         if not cookies_exist:
-            print("Press Enter to continue after logging in...")
+            logger.info("Press Enter to continue after logging in...")
             input("After logging in and passing any CAPTCHA, press Enter to continue...")
         else:
-            print("Cookies loaded. If you need to log in manually, please do so now.")
+            logger.info("Cookies loaded. If you need to log in manually, please do so now.")
 
         # Save cookies for future use
         try:
@@ -86,22 +89,23 @@ def login(driver):
             with open(cookies_path, "w") as f:
                 json.dump(cookies, f, indent=2)
         except Exception as e:
-            print(f"Error saving cookies: {e}")
+            logger.error(f"Error saving cookies: {e}")
 
     except Exception as e:
-        print(f"Error during login process: {e}")
+        logger.error(f"Error during login process: {e}")
         raise
 
 
 def cleanup_driver(driver):
     """Safely cleanup WebDriver resources"""
+    logger = get_logger()
     try:
         if driver:
             # Close all windows
             driver.close()
             driver.quit()
     except Exception as e:
-        print(f"Error closing driver: {e}")
+        logger.error(f"Error closing driver: {e}")
     finally:
         # Force garbage collection
         gc.collect()
