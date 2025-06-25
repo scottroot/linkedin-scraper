@@ -16,6 +16,8 @@ Place your `contacts.csv` file in the root directory with these exact column nam
 
 **Mac users:** Double-click `run_app_mac.command`
 
+![Application Screenshot](img/instructions.png)
+
 ### 3. Important Notes
 ⚠️ **Risk Warning:** The application may crash due to:
 - Rate limiting by LinkedIn
