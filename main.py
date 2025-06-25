@@ -8,6 +8,8 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import pandas as pd
 import time
 import re
+import argparse
+import sys
 
 def wait_for_page_load(driver, timeout=20):
     """Wait for the page to be fully loaded using multiple strategies"""
@@ -397,12 +399,28 @@ def check_employment_with_driver(driver, name, company, threshold=75, max_profil
     return False
 
 def main():
+    # Set up command line argument parsing
+    parser = argparse.ArgumentParser(description='LinkedIn Contact Validator')
+    parser.add_argument('--start-row', type=int, default=0,
+                       help='Row number to start processing from (0-indexed, default: 0)')
+    parser.add_argument('--limit', type=int, default=None,
+                       help='Maximum number of rows to consider (including already processed ones)')
+    parser.add_argument('--batch-size', type=int, default=5,
+                       help='Number of contacts to process before saving (default: 5)')
+    parser.add_argument('--delay', type=int, default=30,
+                       help='Seconds to wait between batches (default: 30)')
+
+    args = parser.parse_args()
+
     # Read the CSV file
     print("Reading contacts.csv...")
     contacts_df = pd.read_csv('contacts.csv')
 
     # Display initial data
     print(f"Found {len(contacts_df)} contacts")
+    print(f"Starting from row {args.start_row}")
+    if args.limit:
+        print(f"Processing limit: {args.limit} rows")
     print("\nFirst few rows:")
     print(contacts_df.head())
 
@@ -415,8 +433,24 @@ def main():
         contacts_df['Valid'] = contacts_df['Valid'].astype('object')
         print("\nConverted 'Valid' column to object dtype")
 
+    # Validate start row
+    if args.start_row < 0 or args.start_row >= len(contacts_df):
+        print(f"Error: Start row {args.start_row} is out of range (0-{len(contacts_df)-1})")
+        sys.exit(1)
+
+    # Calculate the end row based on limit
+    end_row = len(contacts_df)
+    if args.limit:
+        end_row = min(args.start_row + args.limit, len(contacts_df))
+        print(f"Will consider rows {args.start_row} to {end_row-1} (total: {end_row - args.start_row} rows)")
+
+    # Slice the dataframe to start from the specified row and apply limit
+    if args.start_row > 0 or args.limit:
+        contacts_df = contacts_df.iloc[args.start_row:end_row].copy()
+        print(f"Processing {len(contacts_df)} contacts (rows {args.start_row}-{end_row-1})")
+
     # Process contacts in batches
-    process_contacts_batch(contacts_df, batch_size=5, delay_between_batches=30)
+    process_contacts_batch(contacts_df, batch_size=args.batch_size, delay_between_batches=args.delay)
 
     # Display final results
     print("\nFinal results:")
