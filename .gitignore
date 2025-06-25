@@ -1,0 +1,7 @@
+.vscode/
+_archive/
+*.sublime-project
+*.sublime-workspace
+linkedin_cookies.json
+.DS_Store
+__pycache__/
