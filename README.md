@@ -2,23 +2,29 @@
 
 This tool checks if people from your contacts list are currently employed at specific companies by looking at their LinkedIn profiles.
 
-## Quick Start
+## Setup
 
-### 1. Prepare your contacts.csv file
+### 1. Install Python requirements
+Open Terminal (Mac) or Command Prompt (Windows) in the project directory and run:
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Prepare your contacts.csv file
 Place your `contacts.csv` file in the root directory with these exact column names:
 - `First Name`
 - `Last Name`
 - `Account Name` (this is the company name)
 - `Valid` (will be filled automatically)
 
-### 2. Run the application
+### 3. Run the application
 **Windows users:** Double-click `run_app_windows.bat`
 
 **Mac users:** Double-click `run_app_mac.command`
 
 ![Application Screenshot](img/instructions.png)
 
-### 3. Important Notes
+### 4. Important Notes
 ⚠️ **Risk Warning:** The application may crash due to:
 - Rate limiting by LinkedIn
 - Blocking by search engines (Google/Bing)
