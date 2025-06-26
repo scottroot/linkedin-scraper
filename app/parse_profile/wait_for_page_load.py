@@ -5,7 +5,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 
-def wait_for_page_load(driver, timeout=10):
+def wait_for_page_load(driver, timeout=10, selectors=[".artdeco-card"]):
     """
     Wait for the page to be fully loaded using multiple strategies
     """
@@ -27,26 +27,9 @@ def wait_for_page_load(driver, timeout=10):
                 print("Page failed to load basic structure")
                 return False
 
-        # Wait for profile-specific elements (try multiple selectors)
-        # TODO: confirm the profile selectors being used... I do not need to wawit forever for unecessasry elements
-        profile_selectors = [
-            # New LinkedIn selectors
-            # "[data-view-name='profile-card']",
-            # ".pv-profile-section",
-            ".artdeco-card",
-            # ".ph5.pb5",
-            # ".pv-text-details__left-panel",
-            # # Fallback selectors
-            # "main",
-            # ".scaffold-finite-scroll",
-            # ".pvs-profile-content",
-            # # Generic selectors that should work
-            # "section",
-            # ".artdeco-card"
-        ]
 
         element_found = False
-        for selector in profile_selectors:
+        for selector in selectors:
             try:
                 print(f"Waiting up to 5 seconds for profile element: {selector}")
                 WebDriverWait(driver, 5).until(
@@ -72,10 +55,21 @@ def wait_for_page_load(driver, timeout=10):
                 print("Page appears to be empty or not loading properly")
                 return False
 
-        # TODO: I do not think this is needed, but leaving it here commented out for now.
-        # # Additional wait for dynamic content
-        # print("Waiting 3 seconds for dynamic content to fully load...")
-        # time.sleep(3)
+        # Additional wait for Experience section to load
+        print("Waiting for Experience section to load...")
+        try:
+            # Wait for experience-related elements to appear
+            WebDriverWait(driver, 10).until(
+                lambda d: len(d.find_elements(By.CSS_SELECTOR, "li.artdeco-list__item")) > 0
+            )
+            print("Experience section elements found")
+        except TimeoutException:
+            print("Warning: Experience section elements not found within timeout")
+            # Don't fail here, just log the warning
+
+        # Additional wait for dynamic content to fully load
+        print("Waiting 2 seconds for dynamic content to fully load...")
+        time.sleep(2)
 
         return element_found
 

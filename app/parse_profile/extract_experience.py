@@ -115,6 +115,7 @@ def find_experience_section(driver, timeout=10):
     except Exception as e:
         logger.error(f"Error in last resort search: {e}")
 
+    exit("No experience section found for profile...")
     return []
 
 

@@ -65,15 +65,15 @@ class LinkedInScraperGUI(QMainWindow):
 
         # Variables
         self.input_file_path = os.path.join(os.getcwd(), "contacts.csv")
-        self.output_folder_path = os.getcwd()
-        self.batch_size = 5
-        self.delay = 30
+        self.batch_size = 3
+        self.delay = 15
         self.start_row = 0
         self.limit = 0
         self.show_advanced = False
 
         # Data
         self.contacts_df = None
+        self.last_file_modified_time = None
         self.processing_thread = None
         self.stop_processing_flag = False
         self.stop_event = threading.Event()
@@ -90,7 +90,17 @@ class LinkedInScraperGUI(QMainWindow):
         # Logger
         self.logger = get_logger()
 
+        # Set up file monitoring timer
+        self.file_monitor_timer = QTimer()
+        self.file_monitor_timer.timeout.connect(self.check_file_changes)
+        self.file_monitor_timer.start(2000)  # Check every 2 seconds
+
         self.setup_ui()
+
+        # Auto-load the default file if it exists
+        if os.path.exists(self.input_file_path):
+            print(f"Auto-loading default file: {self.input_file_path}")
+            self.load_and_validate_csv()
 
     def setup_ui(self):
         # Central widget
@@ -111,38 +121,27 @@ class LinkedInScraperGUI(QMainWindow):
         title_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(title_label)
 
-        # Input file selection
-        input_group = QGroupBox("Input File")
-        input_layout = QHBoxLayout(input_group)
+        # File selection group
+        file_group = QGroupBox("File Selection")
+        file_layout = QHBoxLayout(file_group)
 
-        input_label = QLabel("Input CSV File:")
-        self.input_file_edit = QLineEdit(self.input_file_path)
-        input_browse_btn = QPushButton("Browse")
-        input_browse_btn.clicked.connect(self.browse_input_file)
+        self.input_file_edit = QLineEdit()
+        self.input_file_edit.setPlaceholderText("Select a CSV file...")
+        self.input_file_edit.setReadOnly(True)
+        self.input_file_edit.setText(self.input_file_path)  # Set default file path
 
-        input_layout.addWidget(input_label)
-        input_layout.addWidget(self.input_file_edit)
-        input_layout.addWidget(input_browse_btn)
-        main_layout.addWidget(input_group)
+        self.browse_button = QPushButton("Browse")
+        self.browse_button.clicked.connect(self.browse_input_file)
 
-        # Output folder selection
-        output_group = QGroupBox("Output Folder")
-        output_layout = QHBoxLayout(output_group)
+        self.refresh_button = QPushButton("Reload from disk")
+        self.refresh_button.clicked.connect(self.refresh_preview)
 
-        output_label = QLabel("Output Folder:")
-        self.output_folder_edit = QLineEdit(self.output_folder_path)
-        output_browse_btn = QPushButton("Browse")
-        output_browse_btn.clicked.connect(self.browse_output_folder)
+        file_layout.addWidget(QLabel("Input CSV File:"))
+        file_layout.addWidget(self.input_file_edit, 1)
+        file_layout.addWidget(self.browse_button)
+        file_layout.addWidget(self.refresh_button)
 
-        output_layout.addWidget(output_label)
-        output_layout.addWidget(self.output_folder_edit)
-        output_layout.addWidget(output_browse_btn)
-        main_layout.addWidget(output_group)
-
-        # Load and validate button
-        self.load_button = QPushButton("Load & Validate CSV")
-        self.load_button.clicked.connect(self.load_and_validate_csv)
-        main_layout.addWidget(self.load_button)
+        main_layout.addWidget(file_group)
 
         # File info group
         self.file_info_group = QGroupBox("File Information")
@@ -151,6 +150,11 @@ class LinkedInScraperGUI(QMainWindow):
         self.file_info_text = QTextEdit()
         self.file_info_text.setMaximumHeight(200)
         self.file_info_text.setReadOnly(True)
+
+        # Set monospaced font for file info text
+        monospace_font = QFont("Courier New", 12)  # Use Consolas font with size 12
+        self.file_info_text.setFont(monospace_font)
+
         file_info_layout.addWidget(self.file_info_text)
         main_layout.addWidget(self.file_info_group)
 
@@ -185,7 +189,7 @@ class LinkedInScraperGUI(QMainWindow):
         self.batch_size_spin = QSpinBox()
         self.batch_size_spin.setMinimum(1)
         self.batch_size_spin.setMaximum(100)
-        self.batch_size_spin.setValue(5)
+        self.batch_size_spin.setValue(15)
         batch_size_help = QLabel("(contacts per batch)")
         advanced_layout.addWidget(batch_size_label, 2, 0)
         advanced_layout.addWidget(self.batch_size_spin, 2, 1)
@@ -196,7 +200,7 @@ class LinkedInScraperGUI(QMainWindow):
         self.delay_spin = QSpinBox()
         self.delay_spin.setMinimum(1)
         self.delay_spin.setMaximum(300)
-        self.delay_spin.setValue(30)
+        self.delay_spin.setValue(5)
         delay_help = QLabel("(between batches)")
         advanced_layout.addWidget(delay_label, 3, 0)
         advanced_layout.addWidget(self.delay_spin, 3, 1)
@@ -252,15 +256,9 @@ class LinkedInScraperGUI(QMainWindow):
             self.input_file_edit.setText(filename)
             self.input_file_path = filename
 
-    def browse_output_folder(self):
-        folder = QFileDialog.getExistingDirectory(
-            self,
-            "Select Output Folder",
-            os.getcwd()
-        )
-        if folder:
-            self.output_folder_edit.setText(folder)
-            self.output_folder_path = folder
+            # Automatically load and validate the CSV file
+            print(f"File selected: {filename}")
+            self.load_and_validate_csv()
 
     def toggle_advanced(self):
         if self.show_advanced:
@@ -270,6 +268,23 @@ class LinkedInScraperGUI(QMainWindow):
             self.advanced_group.show()
             self.advanced_toggle_btn.setText("Hide Advanced Options")
         self.show_advanced = not self.show_advanced
+
+    def check_file_modified(self, file_path):
+        """Check if the file has been modified since last load"""
+        if not os.path.exists(file_path):
+            return False
+
+        current_modified_time = os.path.getmtime(file_path)
+
+        if self.last_file_modified_time is None:
+            self.last_file_modified_time = current_modified_time
+            return True
+
+        if current_modified_time > self.last_file_modified_time:
+            self.last_file_modified_time = current_modified_time
+            return True
+
+        return False
 
     def load_and_validate_csv(self):
         input_file = self.input_file_edit.text()
@@ -281,15 +296,36 @@ class LinkedInScraperGUI(QMainWindow):
             QMessageBox.critical(self, "Error", "Selected file does not exist.")
             return
 
+        # Check if file has been modified
+        file_modified = self.check_file_modified(input_file)
+        if file_modified:
+            print(f"File {input_file} has been modified, reloading...")
+        else:
+            print(f"File {input_file} has not been modified since last load")
+
         try:
+            # Clear the file info text first
+            self.file_info_text.clear()
+
             # Load CSV
             self.contacts_df = pd.read_csv(input_file)
+
+            # Add debugging information
+            print(f"Loaded CSV file: {input_file}")
+            print(f"DataFrame shape: {self.contacts_df.shape}")
+            print(f"DataFrame columns: {list(self.contacts_df.columns)}")
+            print(f"First few rows:")
+            print(self.contacts_df.head(3))
 
             # Validate structure
             validation_result = self.validate_csv_structure()
 
             # Display file info
             self.display_file_info(validation_result)
+
+            # Force a repaint/update of the file info text widget
+            self.file_info_text.repaint()
+            self.file_info_text.update()
 
             if validation_result['is_valid']:
                 self.process_button.setEnabled(True)
@@ -299,6 +335,9 @@ class LinkedInScraperGUI(QMainWindow):
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load CSV file: {str(e)}")
+            print(f"Error loading CSV: {e}")
+            import traceback
+            traceback.print_exc()
 
     def validate_csv_structure(self):
         """Validate the CSV structure and return validation results"""
@@ -317,11 +356,6 @@ class LinkedInScraperGUI(QMainWindow):
             result['is_valid'] = False
             result['issues'].append(f"Missing required columns: {', '.join(missing_columns)}")
 
-        # Check if Valid column exists
-        if 'Valid' not in self.contacts_df.columns:
-            result['warnings'].append("'Valid' column not found - will be created during processing")
-        else:
-            result['info'].append("'Valid' column found - existing values will be preserved")
 
         # Check for empty data
         if len(self.contacts_df) == 0:
@@ -344,11 +378,17 @@ class LinkedInScraperGUI(QMainWindow):
 
     def display_file_info(self, validation_result):
         """Display file information and validation results"""
+        # Clear the text widget completely
         self.file_info_text.clear()
+
+        # Add debugging information
+        print(f"Displaying file info for DataFrame with shape: {self.contacts_df.shape}")
+        print(f"DataFrame head:")
+        print(self.contacts_df.head(3))
 
         # File info
         self.file_info_text.append("FILE INFORMATION:")
-        self.file_info_text.append("=" * 50)
+        self.file_info_text.append("=" * 70)
 
         for info in validation_result['info']:
             self.file_info_text.append(f"✓ {info}")
@@ -356,33 +396,58 @@ class LinkedInScraperGUI(QMainWindow):
         # Warnings
         if validation_result['warnings']:
             self.file_info_text.append("\nWARNINGS:")
-            self.file_info_text.append("=" * 50)
+            self.file_info_text.append("=" * 70)
             for warning in validation_result['warnings']:
                 self.file_info_text.append(f"⚠ {warning}")
 
         # Issues
         if validation_result['issues']:
             self.file_info_text.append("\nISSUES:")
-            self.file_info_text.append("=" * 50)
+            self.file_info_text.append("=" * 70)
             for issue in validation_result['issues']:
                 self.file_info_text.append(f"✗ {issue}")
 
         # Sample data
         if len(self.contacts_df) > 0:
             self.file_info_text.append("\nSAMPLE DATA (first 3 rows):")
-            self.file_info_text.append("=" * 50)
-            sample_data = self.contacts_df.head(3).to_string(index=False)
-            self.file_info_text.append(sample_data)
+            self.file_info_text.append("=" * 70)
+
+            # Get the first 3 rows
+            sample_df = self.contacts_df.head(3)
+            col_widths = {
+                "First Name": 14,
+                "Last Name": 14,
+                "Account Name": 16,
+                "Valid": 8,
+                "Note": 8
+            }
+
+            # Convert all to strings and pad
+            padded_df = sample_df.copy()
+            for col, width in col_widths.items():
+                padded_df[col] = padded_df[col].astype(str).apply(lambda x: x.ljust(width))
+
+            # Build header
+            header = "  ".join(col.ljust(col_widths[col]) for col in padded_df.columns)
+            self.file_info_text.append(header)
+
+            # Build each row
+            for _, row in padded_df.iterrows():
+                row_str = "  ".join(row[col] for col in padded_df.columns)
+                self.file_info_text.append(row_str)
+        # Force the widget to update
+        self.file_info_text.repaint()
+        self.file_info_text.update()
+
+        # Scroll to top
+        cursor = self.file_info_text.textCursor()
+        cursor.movePosition(QTextCursor.Start)
+        self.file_info_text.setTextCursor(cursor)
 
     def start_processing(self):
         """Start the processing in a separate thread"""
         if self.contacts_df is None:
-            QMessageBox.critical(self, "Error", "Please load and validate a CSV file first.")
-            return
-
-        output_folder = self.output_folder_edit.text()
-        if not output_folder:
-            QMessageBox.critical(self, "Error", "Please select an output folder.")
+            QMessageBox.critical(self, "Error", "Please select a CSV file first.")
             return
 
         # Show information about the login process
@@ -395,7 +460,6 @@ class LinkedInScraperGUI(QMainWindow):
 
         # Disable buttons during processing
         self.process_button.setEnabled(False)
-        self.load_button.setEnabled(False)
 
         # Show stop button
         self.stop_button.setEnabled(True)
@@ -418,8 +482,8 @@ class LinkedInScraperGUI(QMainWindow):
     def process_contacts(self):
         """Process contacts in a separate thread - NO GUI CALLS HERE"""
         try:
-            # Create output file path
-            output_file = os.path.join(self.output_folder_edit.text(), 'contacts_validated.csv')
+            # Use the original input file as the output file
+            output_file = self.input_file_edit.text()
 
             # Copy the dataframe to avoid modifying the original
             working_df = self.contacts_df.copy()
@@ -434,11 +498,18 @@ class LinkedInScraperGUI(QMainWindow):
             start_row = self.start_row_spin.value()
             limit = self.limit_spin.value()
 
+            # Log the settings being applied
+            self.thread_safe_log(f"Start Row: {start_row}")
+            self.thread_safe_log(f"Limit: {limit} (0 = no limit)")
+
             if start_row > 0 or limit > 0:
                 end_row = len(working_df)
                 if limit > 0:
                     end_row = min(start_row + limit, len(working_df))
+                    self.thread_safe_log(f"Applying limit: processing rows {start_row+1} to {end_row} (out of {len(self.contacts_df)} total rows)")
                 working_df = working_df.iloc[start_row:end_row].copy()
+            else:
+                self.thread_safe_log(f"No limit applied: processing all {len(working_df)} rows")
 
             # Process contacts
             self.thread_safe_log("Starting LinkedIn contact validation...")
@@ -549,7 +620,6 @@ class LinkedInScraperGUI(QMainWindow):
         self.progress_bar.setValue(1)
         self.progress_group.hide()
         self.process_button.setEnabled(True)
-        self.load_button.setEnabled(True)
 
         # Hide stop button and show process button
         self.stop_button.hide()
@@ -570,6 +640,10 @@ class LinkedInScraperGUI(QMainWindow):
 
     def closeEvent(self, event):
         """Handle application close event"""
+        # Stop the file monitoring timer
+        if hasattr(self, 'file_monitor_timer'):
+            self.file_monitor_timer.stop()
+
         if self.message_processor.isRunning():
             self.message_processor.stop()
             self.message_processor.wait()
@@ -583,6 +657,25 @@ class LinkedInScraperGUI(QMainWindow):
         self.activateWindow()
         # Set focus to the first input field
         self.input_file_edit.setFocus()
+
+    def refresh_preview(self):
+        """Refresh the CSV preview"""
+        input_file = self.input_file_edit.text()
+        if input_file and os.path.exists(input_file):
+            # Force a complete reload by clearing the cached data
+            self.contacts_df = None
+            self.last_file_modified_time = None
+            print("Forcing complete reload of CSV file...")
+            self.load_and_validate_csv()
+        else:
+            print("No valid file selected for refresh")
+
+    def check_file_changes(self):
+        """Check for file changes and refresh the preview"""
+        input_file = self.input_file_edit.text()
+        if input_file and self.check_file_modified(input_file):
+            print(f"File {input_file} has been modified, auto-refreshing preview...")
+            self.refresh_preview()
 
 def main():
     try:

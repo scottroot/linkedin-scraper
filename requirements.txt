@@ -6,3 +6,4 @@ python-Levenshtein==0.27.1
 selenium==4.33.0
 psutil==6.1.0
 PySide6>=6.5.0
+python-dotenv==1.1.1
