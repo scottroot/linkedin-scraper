@@ -152,7 +152,7 @@ class LinkedInScraperGUI(QMainWindow):
         self.file_info_text.setReadOnly(True)
 
         # Set monospaced font for file info text
-        monospace_font = QFont("Courier New", 12)  # Use Consolas font with size 12
+        monospace_font = QFont("Courier New", 11)  # Use Consolas font with size 12
         self.file_info_text.setFont(monospace_font)
 
         file_info_layout.addWidget(self.file_info_text)
@@ -414,13 +414,23 @@ class LinkedInScraperGUI(QMainWindow):
 
             # Get the first 3 rows
             sample_df = self.contacts_df.head(3)
-            col_widths = {
-                "First Name": 14,
-                "Last Name": 14,
-                "Account Name": 16,
-                "Valid": 8,
-                "Note": 8
-            }
+
+            # Define column widths dynamically based on existing columns
+            col_widths = {}
+            for col in sample_df.columns:
+                if col == "First Name":
+                    col_widths[col] = 14
+                elif col == "Last Name":
+                    col_widths[col] = 14
+                elif col == "Account Name":
+                    col_widths[col] = 16
+                elif col == "Valid":
+                    col_widths[col] = 8
+                elif col == "Note":
+                    col_widths[col] = 8
+                else:
+                    # For any other columns, use a reasonable default width
+                    col_widths[col] = max(len(col), 12)
 
             # Convert all to strings and pad
             padded_df = sample_df.copy()

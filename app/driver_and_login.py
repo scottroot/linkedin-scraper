@@ -1,5 +1,9 @@
+import os
+os.environ['CHROME_LOG_FILE'] = 'NUL' if os.name == 'nt' else '/dev/null'
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import WebDriverException
 import json
 import os
@@ -20,7 +24,26 @@ def get_driver(headless=False):
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+
+        # Enhanced logging suppression
+        chrome_options.add_argument("--silent")
+        chrome_options.add_argument("--log-level=3")  # Suppresses INFO and WARNING logs
+        chrome_options.add_argument("--disable-logging")
+        chrome_options.add_argument("--disable-gpu-logging")
+        chrome_options.add_argument("--disable-software-rasterizer")
+
+        # Specific fixes for your WebGL errors
+        chrome_options.add_argument("--disable-webgl")
+        chrome_options.add_argument("--disable-webgl2")
+        chrome_options.add_argument("--disable-3d-apis")
+        chrome_options.add_argument("--disable-accelerated-2d-canvas")
+        chrome_options.add_argument("--disable-accelerated-jpeg-decoding")
+        chrome_options.add_argument("--disable-accelerated-mjpeg-decode")
+        chrome_options.add_argument("--disable-accelerated-video-decode")
+
+
+        # Suppress additional Chrome logs
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
 
         # Add memory management options
@@ -33,7 +56,11 @@ def get_driver(headless=False):
         chrome_options.add_argument("--disable-web-security")
         chrome_options.add_argument("--allow-running-insecure-content")
 
-        driver = webdriver.Chrome(options=chrome_options)
+        # On Windows, this discards chromedriver logs
+        service = Service(log_path="NUL")
+
+
+        driver = webdriver.Chrome(options=chrome_options, service=service)
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         # Set page load timeout

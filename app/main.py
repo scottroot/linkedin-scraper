@@ -57,7 +57,7 @@ def process_one_contact(
             if linkedin_driver:
                 linkedin_driver.current_url  # Test if browser is responsive
         except Exception as browser_error:
-            log(f"Browser health check failed: {browser_error}")
+            print(f"Browser health check failed: {browser_error}")
             log("Attempting to restart browsers...")
             # Restart browsers if they're unresponsive
             if bing_driver:
@@ -85,9 +85,9 @@ def process_one_contact(
 
         # Check if we got any results
         if not url_candidates:
-            log(f"Search #{search_count}: No LinkedIn profiles found for {full_name} at {company_name}")
+            log(f"Search #{search_count} (Row {idx+1}): No LinkedIn profiles found for {full_name} at {company_name}")
             if search_count > 45:  # Log when we're approaching the 50 limit
-                log(f"Search #{search_count}: This might be due to rate limiting (approaching 50 search limit)")
+                log(f"Search #{search_count} (Row {idx+1}): This might be due to rate limiting (approaching 50 search limit)")
             contacts_df.at[idx, 'Note'] = 'Profile not found'
             return
 
@@ -115,13 +115,13 @@ def process_one_contact(
         # time.sleep(2)
 
     except IndexError as e:
-        log(f"Search #{search_count}: Error: No LinkedIn profiles found for {full_name} at {company_name} (likely rate limited)")
+        log(f"Search #{search_count} (Row {idx+1}): Error: No LinkedIn profiles found for {full_name} at {company_name} (likely rate limited)")
         contacts_df.at[idx, 'Note'] = 'Profile not found - Maybe rate limited?'
         # Force garbage collection after error
         gc.collect()
     except Exception as e:
-        log(f"Search #{search_count}: Error processing {full_name}: {str(e)}")
-        log(f"Search #{search_count}: Error type: {type(e).__name__}")
+        log(f"Search #{search_count} (Row {idx+1}): Error processing {full_name}: {str(e)}")
+        log(f"Search #{search_count} (Row {idx+1}): Error type: {type(e).__name__}")
         # Mark as False if there's an error
         contacts_df.at[idx, 'Note'] = str(e)
         # Force garbage collection after error
@@ -129,7 +129,7 @@ def process_one_contact(
 
         # Check if we're around the 50 mark and log it
         if 45 <= search_count <= 55:
-            log(f"Search #{search_count}: WARNING - Error occurred around the 50-contact mark. This might indicate rate limiting or resource issues.")
+            log(f"Search #{search_count} (Row {idx+1}): WARNING - Error occurred around the 50-contact mark. This might indicate rate limiting or resource issues.")
 
 
 def process_contacts_batch(contacts_df, batch_size=1, delay_between_batches=10, log_callback=None, save_callback=None, stop_flag=None):
@@ -218,7 +218,7 @@ def process_contacts_batch(contacts_df, batch_size=1, delay_between_batches=10, 
                 company_name = row['Account Name']
 
                 search_count += 1
-                log(f"Search #{search_count}: Checking {full_name} at {company_name}")
+                log(f"Search #{search_count} (Row {idx+1}): Checking {full_name} at {company_name}")
 
                 process_one_contact(
                     full_name,
