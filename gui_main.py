@@ -78,6 +78,10 @@ class LinkedInScraperGUI(QMainWindow):
         self.stop_processing_flag = False
         self.stop_event = threading.Event()
 
+        # Login confirmation mechanism
+        self.login_confirmation_event = threading.Event()
+        self.waiting_for_login_confirmation = False
+
         # Thread-safe communication queue
         self.message_queue = queue.Queue()
         self.message_processor = MessageProcessor(self.message_queue)
@@ -240,6 +244,41 @@ class LinkedInScraperGUI(QMainWindow):
         self.progress_text.setMaximumHeight(150)
         self.progress_text.setReadOnly(True)
         progress_layout.addWidget(self.progress_text)
+
+        # Login confirmation button (initially hidden)
+        self.login_confirm_button = QPushButton("Confirm Logged In")
+        self.login_confirm_button.clicked.connect(self.confirm_login)
+        self.login_confirm_button.setEnabled(False)
+        self.login_confirm_button.hide()
+
+        # Style the button to be very noticeable - blue background with white text
+        self.login_confirm_button.setStyleSheet("""
+            QPushButton {
+                background-color: #0073b1;  /* LinkedIn blue */
+                color: white;
+                border: 2px solid #0073b1;
+                border-radius: 8px;
+                padding: 12px 24px;
+                font-size: 14px;
+                font-weight: bold;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #005885;  /* Darker blue on hover */
+                border-color: #005885;
+            }
+            QPushButton:pressed {
+                background-color: #004471;  /* Even darker when pressed */
+                border-color: #004471;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+                border-color: #cccccc;
+            }
+        """)
+
+        progress_layout.addWidget(self.login_confirm_button)
 
         # Hide progress group initially
         self.progress_group.hide()
@@ -464,7 +503,8 @@ class LinkedInScraperGUI(QMainWindow):
         QMessageBox.information(self, "Processing Info",
             "Processing will start in a separate thread.\n\n"
             "A browser window will open for LinkedIn login.\n"
-            "You may need to log in manually if cookies are not available.\n\n"
+            "If you need to log in manually, you'll see a 'Confirm Logged In' button in the progress area.\n"
+            "Simply click that button after you've successfully logged in.\n\n"
             "The GUI will remain responsive during processing.\n"
             "You can monitor progress in the progress area below.")
 
@@ -550,7 +590,8 @@ class LinkedInScraperGUI(QMainWindow):
                 delay_between_batches=self.delay_spin.value(),
                 log_callback=self.thread_safe_log,  # Use thread-safe logging for GUI
                 save_callback=save_progress,
-                stop_flag=self.stop_event
+                stop_flag=self.stop_event,
+                login_confirmation_callback=self.login_confirmation_callback
             )
 
             # Save the final results
@@ -635,6 +676,11 @@ class LinkedInScraperGUI(QMainWindow):
         self.stop_button.hide()
         self.process_button.show()
 
+        # Hide login confirmation button if it's visible
+        self.login_confirm_button.hide()
+        self.login_confirm_button.setEnabled(False)
+        self.waiting_for_login_confirmation = False
+
         # Reset stop flag
         self.stop_processing_flag = False
         self.stop_event.clear()
@@ -686,6 +732,27 @@ class LinkedInScraperGUI(QMainWindow):
         if input_file and self.check_file_modified(input_file):
             print(f"File {input_file} has been modified, auto-refreshing preview...")
             self.refresh_preview()
+
+    def confirm_login(self):
+        """Handle login confirmation from GUI button"""
+        if self.waiting_for_login_confirmation:
+            self.login_confirmation_event.set()
+            self.login_confirm_button.setEnabled(False)
+            self.login_confirm_button.hide()
+            self.waiting_for_login_confirmation = False
+            self.thread_safe_log("Login confirmed, continuing with processing...")
+
+    def login_confirmation_callback(self):
+        """Callback function for login confirmation - called from processing thread"""
+        self.waiting_for_login_confirmation = True
+        self.login_confirmation_event.clear()
+
+        # Show the login confirmation button in the GUI
+        self.login_confirm_button.setEnabled(True)
+        self.login_confirm_button.show()
+
+        # Wait for the user to click the button
+        self.login_confirmation_event.wait()
 
 def main():
     try:

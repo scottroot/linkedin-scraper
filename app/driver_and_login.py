@@ -78,17 +78,19 @@ def get_driver(headless=False):
         raise
 
 
-def login(driver):
+def login(driver, login_confirmation_callback=None):
     """Handle LinkedIn login with cookie management and better error handling"""
     logger = get_logger()
     try:
-        logger.info("Please log in manually in the browser window.")
-        driver.get("https://www.linkedin.com")
-
         # Load existing cookies if available
         cookies_path = "linkedin_cookies.json"
         cookies_exist = os.path.exists(cookies_path)
+
         if cookies_exist:
+            # Cookies exist - load them and use headless mode
+            logger.info("Loading existing cookies for headless login...")
+            driver.get("https://www.linkedin.com")
+
             try:
                 with open(cookies_path, "r") as f:
                     cookies = json.load(f)
@@ -100,23 +102,39 @@ def login(driver):
                         except Exception as cookie_error:
                             logger.error(f"Error adding cookie: {cookie_error}")
                             continue
+                logger.info("Cookies loaded successfully")
             except Exception as e:
                 logger.error(f"Error loading cookies: {e}")
+                # If cookie loading fails, treat as if no cookies exist
+                cookies_exist = False
 
-        driver.get("https://www.linkedin.com/login")
         if not cookies_exist:
-            logger.info("Press Enter to continue after logging in...")
-            input("After logging in and passing any CAPTCHA, press Enter to continue...")
-        else:
-            logger.info("Cookies loaded. If you need to log in manually, please do so now.")
+            # No cookies exist - require manual login
+            logger.info("No cookies found. Please log in manually in the browser window.")
+            driver.get("https://www.linkedin.com/login")
 
-        # Save cookies for future use
-        try:
-            cookies = driver.get_cookies()
-            with open(cookies_path, "w") as f:
-                json.dump(cookies, f, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving cookies: {e}")
+            if login_confirmation_callback:
+                # Use the callback (GUI button) instead of terminal input
+                logger.info("Please log in manually in the browser window, then click 'Confirm Logged In' in the GUI.")
+                login_confirmation_callback()
+            else:
+                # Fallback to terminal input for non-GUI usage
+                logger.info("Press Enter to continue after logging in...")
+                input("After logging in and passing any CAPTCHA, press Enter to continue...")
+
+            # Save cookies for future use AFTER manual login is confirmed
+            try:
+                # Navigate to LinkedIn home to ensure we have the right cookies
+                driver.get("https://www.linkedin.com")
+
+                cookies = driver.get_cookies()
+                logger.info(f"Retrieved {len(cookies)} cookies from browser")
+
+                with open(cookies_path, "w") as f:
+                    json.dump(cookies, f, indent=2)
+                logger.info(f"Cookies saved to {cookies_path}")
+            except Exception as e:
+                logger.error(f"Error saving cookies: {e}")
 
     except Exception as e:
         logger.error(f"Error during login process: {e}")

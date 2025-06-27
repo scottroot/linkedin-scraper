@@ -1,99 +1,99 @@
-First Name,Last Name,Account Name,Valid,Note
-Brittany,Koempel,Bloomberg,True,
-Anne Riley,Moffat,Bloomberg,True,
-Ian,Korovinsky,Bloomberg,False,
-Sam,Brenner,Spotify,False,
-Anas,Hayajneh,AQ Network,False,
-Megan,Chang,Williams-Sheppard,False,
-Todd,Hull,Faulkner-Howard,False,
-Patricia,Robinson,Campbell Inc,False,
-Christine,King,"Mcgrath, Patrick and Barrera",False,
-Kyle,Blair,"Rivera, Castro and Gomez",False,
-Brittany,Koempel,Bloomberg,True,
-Anne Riley,Moffat,Bloomberg,True,
-Ian,Korovinsky,Bloomberg,False,
-Sam,Brenner,Spotify,False,
-Anas,Hayajneh,AQ Network,False,
-Megan,Chang,Williams-Sheppard,,
-Todd,Hull,Faulkner-Howard,,
-Patricia,Robinson,Campbell Inc,,
-Christine,King,"Mcgrath, Patrick and Barrera",,
-Kyle,Blair,"Rivera, Castro and Gomez",,
-Brittany,Koempel,Bloomberg,,
-Anne Riley,Moffat,Bloomberg,,
-Ian,Korovinsky,Bloomberg,,
-Sam,Brenner,Spotify,,
-Anas,Hayajneh,AQ Network,,
-Megan,Chang,Williams-Sheppard,,
-Todd,Hull,Faulkner-Howard,,
-Patricia,Robinson,Campbell Inc,,
-Christine,King,"Mcgrath, Patrick and Barrera",,
-Kyle,Blair,"Rivera, Castro and Gomez",,
-Brittany,Koempel,Bloomberg,,
-Anne Riley,Moffat,Bloomberg,,
-Ian,Korovinsky,Bloomberg,,
-Sam,Brenner,Spotify,,
-Anas,Hayajneh,AQ Network,,
-Megan,Chang,Williams-Sheppard,,
-Todd,Hull,Faulkner-Howard,,
-Patricia,Robinson,Campbell Inc,,
-Christine,King,"Mcgrath, Patrick and Barrera",,
-Kyle,Blair,"Rivera, Castro and Gomez",,
-Brittany,Koempel,Bloomberg,,
-Anne Riley,Moffat,Bloomberg,,
-Ian,Korovinsky,Bloomberg,,
-Sam,Brenner,Spotify,,
-Anas,Hayajneh,AQ Network,,
-Megan,Chang,Williams-Sheppard,,
-Todd,Hull,Faulkner-Howard,,
-Patricia,Robinson,Campbell Inc,,
-Christine,King,"Mcgrath, Patrick and Barrera",,
-Kyle,Blair,"Rivera, Castro and Gomez",,
-Leslie,Bowman,Levy Group,,
-Scott,Boyd,Trujillo PLC,,
-Sabrina,Davis,Page-Glover,,
-Colleen,Salazar,Sanchez-Nguyen,,
-Monica,Lee,"Walker, Pratt and Thomas",,
-Amy,Davis,Golden-Bolton,,
-Tracy,Turner,Mann-Kelley,,
-Lisa,Fernandez,"Payne, Roberts and Davis",,
-Lauren,Stewart,Roberts and Sons,,
-Lori,Johnson,"Green, Jones and Shelton",,
-David,Hernandez,Kirby Ltd,,
-Sandra,Fernandez,Massey-Warren,,
-Aimee,Young,Jacobson PLC,,
-Marcia,Barnes,Hayes-Keller,,
-Wendy,Stark,Miller-Salazar,,
-Tom,Mccoy,Sanchez Ltd,,
-Joseph,Thornton,Norton-Cook,,
-Lisa,Garcia,Wyatt and Sons,,
-Brandon,Berry,"Guzman, Jones and Martinez",,
-Jacob,Greer,Myers LLC,,
-Martha,Wilson,"Smith, Woodward and Lopez",,
-David,Clark,Giles Inc,,
-Amy,Oliver,Jones-Jones,,
-Kevin,Graham,Gordon Inc,,
-Candace,Lyons,Gonzalez-Howard,,
-Jessica,Massey,"Jackson, Chambers and Levy",,
-Brian,Lowe,Peterson LLC,,
-David,Morse,"Thompson, Ruiz and Ortiz",,
-Ashley,Romero,Banks-Price,,
-Diane,Hernandez,"Smith, Harmon and Rogers",,
-Brandon,Campbell,Gill Group,,
-Michael,Roberts,Garza-Mcclain,,
-Melissa,Anderson,Hughes-Perry,,
-Debra,Smith,Hale and Sons,,
-John,Walsh,Page-Nunez,,
-Nancy,Johnson,"Bradley, Barton and Fletcher",,
-Gabriel,Brown,"Moore, Rose and Freeman",,
-Anna,Campos,Simpson LLC,,
-Mary,Williams,Lopez-Key,,
-Cynthia,Miller,"Anderson, Smith and Herring",,
-Robert,Smith,Love Inc,,
-Tina,Lowe,"Davis, Wilson and Banks",,
-Morgan,Ramirez,Garcia Group,,
-Courtney,Johnson,Marsh-Wilson,,
-Jonathan,Valdez,"Newman, Wilson and Moore",,
-Melissa,Williams,Becker PLC,,
-Leroy,Richardson,"Browning, Williams and Curry",,
-Jacqueline,Rios,"Schneider, Ellis and Graham",,
+First Name,Last Name,Account Name
+Brittany,Koempel,Bloomberg
+Anne Riley,Moffat,Bloomberg
+Ian,Korovinsky,Bloomberg
+Sam,Brenner,Spotify
+Anas,Hayajneh,AQ Network
+Megan,Chang,Williams-Sheppard
+Todd,Hull,Faulkner-Howard
+Patricia,Robinson,Campbell Inc
+Christine,King,"Mcgrath, Patrick and Barrera"
+Kyle,Blair,"Rivera, Castro and Gomez"
+Brittany,Koempel,Bloomberg
+Anne Riley,Moffat,Bloomberg
+Ian,Korovinsky,Bloomberg
+Sam,Brenner,Spotify
+Anas,Hayajneh,AQ Network
+Megan,Chang,Williams-Sheppard
+Todd,Hull,Faulkner-Howard
+Patricia,Robinson,Campbell Inc
+Christine,King,"Mcgrath, Patrick and Barrera"
+Kyle,Blair,"Rivera, Castro and Gomez"
+Brittany,Koempel,Bloomberg
+Anne Riley,Moffat,Bloomberg
+Ian,Korovinsky,Bloomberg
+Sam,Brenner,Spotify
+Anas,Hayajneh,AQ Network
+Megan,Chang,Williams-Sheppard
+Todd,Hull,Faulkner-Howard
+Patricia,Robinson,Campbell Inc
+Christine,King,"Mcgrath, Patrick and Barrera"
+Kyle,Blair,"Rivera, Castro and Gomez"
+Brittany,Koempel,Bloomberg
+Anne Riley,Moffat,Bloomberg
+Ian,Korovinsky,Bloomberg
+Sam,Brenner,Spotify
+Anas,Hayajneh,AQ Network
+Megan,Chang,Williams-Sheppard
+Todd,Hull,Faulkner-Howard
+Patricia,Robinson,Campbell Inc
+Christine,King,"Mcgrath, Patrick and Barrera"
+Kyle,Blair,"Rivera, Castro and Gomez"
+Brittany,Koempel,Bloomberg
+Anne Riley,Moffat,Bloomberg
+Ian,Korovinsky,Bloomberg
+Sam,Brenner,Spotify
+Anas,Hayajneh,AQ Network
+Megan,Chang,Williams-Sheppard
+Todd,Hull,Faulkner-Howard
+Patricia,Robinson,Campbell Inc
+Christine,King,"Mcgrath, Patrick and Barrera"
+Kyle,Blair,"Rivera, Castro and Gomez"
+Leslie,Bowman,Levy Group
+Scott,Boyd,Trujillo PLC
+Sabrina,Davis,Page-Glover
+Colleen,Salazar,Sanchez-Nguyen
+Monica,Lee,"Walker, Pratt and Thomas"
+Amy,Davis,Golden-Bolton
+Tracy,Turner,Mann-Kelley
+Lisa,Fernandez,"Payne, Roberts and Davis"
+Lauren,Stewart,Roberts and Sons
+Lori,Johnson,"Green, Jones and Shelton"
+David,Hernandez,Kirby Ltd
+Sandra,Fernandez,Massey-Warren
+Aimee,Young,Jacobson PLC
+Marcia,Barnes,Hayes-Keller
+Wendy,Stark,Miller-Salazar
+Tom,Mccoy,Sanchez Ltd
+Joseph,Thornton,Norton-Cook
+Lisa,Garcia,Wyatt and Sons
+Brandon,Berry,"Guzman, Jones and Martinez"
+Jacob,Greer,Myers LLC
+Martha,Wilson,"Smith, Woodward and Lopez"
+David,Clark,Giles Inc
+Amy,Oliver,Jones-Jones
+Kevin,Graham,Gordon Inc
+Candace,Lyons,Gonzalez-Howard
+Jessica,Massey,"Jackson, Chambers and Levy"
+Brian,Lowe,Peterson LLC
+David,Morse,"Thompson, Ruiz and Ortiz"
+Ashley,Romero,Banks-Price
+Diane,Hernandez,"Smith, Harmon and Rogers"
+Brandon,Campbell,Gill Group
+Michael,Roberts,Garza-Mcclain
+Melissa,Anderson,Hughes-Perry
+Debra,Smith,Hale and Sons
+John,Walsh,Page-Nunez
+Nancy,Johnson,"Bradley, Barton and Fletcher"
+Gabriel,Brown,"Moore, Rose and Freeman"
+Anna,Campos,Simpson LLC
+Mary,Williams,Lopez-Key
+Cynthia,Miller,"Anderson, Smith and Herring"
+Robert,Smith,Love Inc
+Tina,Lowe,"Davis, Wilson and Banks"
+Morgan,Ramirez,Garcia Group
+Courtney,Johnson,Marsh-Wilson
+Jonathan,Valdez,"Newman, Wilson and Moore"
+Melissa,Williams,Becker PLC
+Leroy,Richardson,"Browning, Williams and Curry"
+Jacqueline,Rios,"Schneider, Ellis and Graham"

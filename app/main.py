@@ -17,7 +17,7 @@ import pandas as pd
 from app.logger import get_logger
 
 
-def health_check(driver, driver_name: Literal["LinkedIn", "Bing"], search_count, log):
+def health_check(driver, driver_name: Literal["LinkedIn", "Bing"], search_count, log, login_confirmation_callback=None):
     try:
         # Test if browsers are still responsive
         driver.current_url  # This will throw an exception if browser is dead
@@ -30,7 +30,7 @@ def health_check(driver, driver_name: Literal["LinkedIn", "Bing"], search_count,
             pass
         driver = get_driver(headless=True)
         if driver_name == "LinkedIn":
-            login(driver)
+            login(driver, login_confirmation_callback)
         log(f"{driver_name} browser restarted successfully")
 
     return driver
@@ -44,7 +44,8 @@ def process_one_contact(
     idx,
     contacts_df,
     search_count,
-    log
+    log,
+    login_confirmation_callback=None
 ):
     """
     Process one contact, checking employment status and updating the CSV
@@ -71,7 +72,7 @@ def process_one_contact(
                 linkedin_driver = get_driver(headless=True)
             else:
                 linkedin_driver = get_driver(headless=False)
-            login(linkedin_driver)
+            login(linkedin_driver, login_confirmation_callback)
             log("Browsers restarted successfully")
 
         # Get LinkedIn URL candidates
@@ -132,7 +133,7 @@ def process_one_contact(
             log(f"Search #{search_count} (Row {idx+1}): WARNING - Error occurred around the 50-contact mark. This might indicate rate limiting or resource issues.")
 
 
-def process_contacts_batch(contacts_df, batch_size=1, delay_between_batches=10, log_callback=None, save_callback=None, stop_flag=None):
+def process_contacts_batch(contacts_df, batch_size=1, delay_between_batches=10, log_callback=None, save_callback=None, stop_flag=None, login_confirmation_callback=None):
     """
     Process contacts in batches, checking employment status and updating the CSV
 
@@ -143,6 +144,7 @@ def process_contacts_batch(contacts_df, batch_size=1, delay_between_batches=10, 
         log_callback: Optional callback function for logging messages
         save_callback: Optional callback function for saving progress
         stop_flag: Optional threading.Event or similar to check for stop signal
+        login_confirmation_callback: Optional callback function for login confirmation (GUI button)
     """
     logger = get_logger()
 
@@ -179,7 +181,7 @@ def process_contacts_batch(contacts_df, batch_size=1, delay_between_batches=10, 
 
         # Login once at the beginning
         log("Logging into LinkedIn...")
-        login(linkedin_driver)
+        login(linkedin_driver, login_confirmation_callback)
         log("Login successful!")
 
         for i in range(0, total_rows, batch_size):
@@ -228,7 +230,8 @@ def process_contacts_batch(contacts_df, batch_size=1, delay_between_batches=10, 
                     idx,
                     contacts_df,
                     search_count,
-                    log
+                    log,
+                    login_confirmation_callback
                 )
 
             # Only save and delay if contacts were actually processed in this batch
@@ -244,8 +247,8 @@ def process_contacts_batch(contacts_df, batch_size=1, delay_between_batches=10, 
 
                 # Check browser health every 10 searches
                 if search_count % 10 == 0:
-                    linkedin_driver = health_check(linkedin_driver, "LinkedIn", search_count, log)
-                    bing_driver = health_check(bing_driver, "Bing", search_count, log)
+                    linkedin_driver = health_check(linkedin_driver, "LinkedIn", search_count, log, login_confirmation_callback)
+                    bing_driver = health_check(bing_driver, "Bing", search_count, log, login_confirmation_callback)
 
                 gc.collect()
 
