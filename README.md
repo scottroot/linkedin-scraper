@@ -30,9 +30,10 @@ This program will read this CSV and save it with updates. Two new columns will b
 
 ![Application Screenshot](img/instructions.png)
 
-![Demo Video](https://youtu.be/PTB3Wc7H4_c)
+## Demo Video
+[![Demo Video](https://img.youtube.com/vi/PTB3Wc7H4_c/0.jpg)](https://www.youtube.com/watch?v=PTB3Wc7H4_c)
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/PTB3Wc7H4_c?si=LPQZtI0qBnW3GkI_" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+*Click the thumbnail above to watch the demo video*
 
 ### Logging In
 If you have not logged in before (or not for a while anyway) then the first time you launch the program, it will go to the LinkedIn login page.
