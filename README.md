@@ -32,7 +32,9 @@ This program will read this CSV and save it with updates. Two new columns will b
 
 ## Demo Video
 [Demo video on YouTube](https://www.youtube.com/watch?v=PTB3Wc7H4_c)
+
 [![Demo Video](https://img.youtube.com/vi/PTB3Wc7H4_c/0.jpg)](https://www.youtube.com/watch?v=PTB3Wc7H4_c)
+
 
 ### Logging In
 If you have not logged in before (or not for a while anyway) then the first time you launch the program, it will go to the LinkedIn login page.
