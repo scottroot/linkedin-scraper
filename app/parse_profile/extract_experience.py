@@ -15,9 +15,6 @@ from app.parse_profile.wait_for_page_load import wait_for_page_load
 from app.logger import get_logger
 
 
-LINKEDIN_PAGE_LOAD_TIMEOUT = int(os.getenv("LINKEDIN_PAGE_LOAD_TIMEOUT", 15))
-
-
 def find_experience_section(driver, timeout=10):
     """
     Try multiple strategies to find the experience section.
@@ -227,7 +224,8 @@ def extract_position_info(item) -> Dict[Literal['job_title', 'company', 'employm
 def get_current_employer(
     driver,
     profile_url,
-    verbose=False
+    verbose=False,
+    timeout=15
 ) -> List[Dict[Literal['job_title', 'company', 'employment_type', 'date_range', 'is_current'], Any]]:
     """
     Extract current employer from LinkedIn profile URL using existing driver
@@ -250,15 +248,15 @@ def get_current_employer(
         #     logger.error("Failed to wait for page load")
         #     return []
         try:
-            WebDriverWait(driver, LINKEDIN_PAGE_LOAD_TIMEOUT).until(
+            WebDriverWait(driver, timeout).until(
                 EC.presence_of_element_located((By.TAG_NAME, "main"))
             )
         except TimeoutException:
-            WebDriverWait(driver, LINKEDIN_PAGE_LOAD_TIMEOUT).until(
+            WebDriverWait(driver, timeout).until(
                 EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
 
-        WebDriverWait(driver, LINKEDIN_PAGE_LOAD_TIMEOUT * 2).until(
+        WebDriverWait(driver, timeout * 2).until(
             EC.presence_of_all_elements_located((By.CSS_SELECTOR, "li.artdeco-list__item"))
         )
 
@@ -342,8 +340,133 @@ def get_current_employer(
         return []
 
 
+def get_positions_comprehensive(
+    driver,
+    profile_url,
+    verbose=False,
+    timeout=15
+) -> Dict[Literal['current_positions', 'all_positions'], Any]:
+    """
+    Extract both current and all positions from LinkedIn profile URL in a single pass.
+    Returns a dictionary with the following keys:
+        {
+            'current_positions': list[dict],  # Current positions (existing behavior)
+            'all_positions': list[dict]       # All positions (current + historical)
+        }
+    """
+    logger = get_logger()
+    current_positions = []
+    all_positions = []
+
+    try:
+        logger.info(f"Navigating to profile: {profile_url}")
+        driver.get(profile_url)
+
+        # Wait for page to load
+        try:
+            WebDriverWait(driver, timeout).until(
+                EC.presence_of_element_located((By.TAG_NAME, "main"))
+            )
+        except TimeoutException:
+            WebDriverWait(driver, timeout).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+
+        WebDriverWait(driver, timeout * 2).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "li.artdeco-list__item"))
+        )
+
+        logger.debug("Page loaded successfully, looking for experience section...")
+
+        experience_sections = find_experience_section(driver)
+        if not experience_sections:
+            logger.warning("No experience sections found")
+            return {
+                'current_positions': [],
+                'all_positions': []
+            }
+        logger.debug(f"Found {len(experience_sections)} experience sections")
+
+        # Process each experience section
+        for section_idx, section in enumerate(experience_sections):
+            logger.debug(f"Processing experience section {section_idx + 1}")
+
+            # Try different selectors for experience items
+            item_selectors = [
+                "li.artdeco-list__item",
+                ".artdeco-list__item",
+                "li",
+            ]
+
+            # Process items immediately after finding them to avoid stale element issues
+            for selector in item_selectors:
+                try:
+                    items = section.find_elements(By.CSS_SELECTOR, selector)
+                    if items:
+                        logger.info(f"Found {len(items)} experience items with selector: {selector}")
+
+                        # Process each item immediately to avoid stale element issues
+                        for item_idx, item in enumerate(items):
+                            try:
+                                # Get the HTML content immediately to avoid stale element issues
+                                position_info = extract_position_info(item)
+
+                                logger.info(f"Item {item_idx + 1}:")
+                                logger.info(f"  Title: {position_info['job_title']}")
+                                logger.info(f"  Company: {position_info['company']}")
+                                logger.info(f"  Date: {position_info['date_range']}")
+                                logger.info(f"  Current: {position_info['is_current']}")
+
+                                # Add to all_positions if it has company info
+                                if position_info['company']:
+                                    all_positions.append(position_info)
+
+                                    # Add to current_positions if it meets the current criteria
+                                    if position_info['is_current'] or (item_idx == 0 and not position_info['date_range']):
+                                        current_positions.append(position_info)
+                                        logger.info(f"  -> Added to current positions")
+                                    else:
+                                        logger.info(f"  -> Added to all positions")
+
+                            except Exception as e:
+                                logger.error(f"Error processing item {item_idx + 1}: {e}")
+                                continue
+
+                            # Small delay to prevent overwhelming the page
+                            time.sleep(0.1)
+
+                        # If we successfully processed items with this selector, break
+                        break
+
+                except Exception as e:
+                    logger.debug(f"Selector {selector} failed: {e}")
+                    continue
+
+        logger.info(f"Total current positions found: {len(current_positions)}")
+        logger.info(f"Total all positions found: {len(all_positions)}")
+
+        return {
+            'current_positions': current_positions,
+            'all_positions': all_positions
+        }
+
+    except TimeoutException:
+        logger.error("Timeout waiting for page to load")
+        return {
+            'current_positions': [],
+            'all_positions': []
+        }
+
+    except Exception as e:
+        logger.error(f"Error in get_positions_comprehensive: {e}")
+        return {
+            'current_positions': [],
+            'all_positions': []
+        }
+
+
 if __name__ == "__main__":
-    driver = get_driver(headless=True)
+    driver = get_driver(headless=True, keep_open=False)
     login(driver)
     profile_url = "https://www.linkedin.com/in/abhi-p-11004211/"
     result = get_current_employer(driver, profile_url)

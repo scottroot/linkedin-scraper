@@ -18,12 +18,34 @@ def get_log_level():
 logs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
 os.makedirs(logs_dir, exist_ok=True)
 
+# Global variable to store the current session log file
+_current_session_log_file = None
+
+def get_session_log_file():
+    """Get the current session log file path"""
+    global _current_session_log_file
+    if _current_session_log_file is None:
+        # Create a unique log file for this session with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        _current_session_log_file = os.path.join(logs_dir, f'linkedin_scraper_{timestamp}.log')
+    return _current_session_log_file
+
+def reset_session_log_file():
+    """Reset the session log file to create a new one for the next run"""
+    global _current_session_log_file
+    _current_session_log_file = None
+
+    # Clear all existing loggers to force them to recreate with new handlers
+    for logger_name in logging.root.manager.loggerDict:
+        logger = logging.getLogger(logger_name)
+        logger.handlers.clear()
+
 def get_handlers():
     """Get configured handlers with current log level"""
     log_level = get_log_level()
 
-    # Configure file handler
-    log_file = os.path.join(logs_dir, f'linkedin_scraper_{datetime.now().strftime("%Y%m%d")}.log')
+    # Configure file handler with session-specific filename
+    log_file = get_session_log_file()
     file_handler = logging.FileHandler(log_file)
     file_handler.setLevel(log_level)
     file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
@@ -63,12 +85,14 @@ class Logger:
 
         self._logger = logging.getLogger(name)
 
-        # Only add handlers if they haven't been added already
-        if not self._logger.handlers:
-            self._logger.setLevel(get_log_level())
-            file_handler, console_handler = get_handlers()
-            self._logger.addHandler(file_handler)
-            self._logger.addHandler(console_handler)
+        # Clear existing handlers to ensure we get fresh ones for the new session
+        self._logger.handlers.clear()
+
+        # Set up handlers for this logger
+        self._logger.setLevel(get_log_level())
+        file_handler, console_handler = get_handlers()
+        self._logger.addHandler(file_handler)
+        self._logger.addHandler(console_handler)
 
     def info(self, message):
         """Log an info message."""

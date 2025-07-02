@@ -2,6 +2,7 @@ import sys
 import os
 import threading
 import queue
+import chardet
 
 
 from PySide6.QtWidgets import (
@@ -260,6 +261,11 @@ class LinkedInScraperGUI(QMainWindow):
         advanced_layout.addWidget(self.linkedin_threshold_spin, 8, 1)
         advanced_layout.addWidget(linkedin_threshold_help, 8, 2)
 
+        # Keep LinkedIn Browser Open
+        self.keep_linkedin_open_checkbox = QCheckBox("Keep LinkedIn Browser Open")
+        self.keep_linkedin_open_checkbox.setToolTip("Keep LinkedIn browser window visible (even if already logged in)")
+        advanced_layout.addWidget(self.keep_linkedin_open_checkbox, 9, 0, 1, 3)
+
         # Advanced toggle button
         self.advanced_toggle_btn = QPushButton("Show Advanced Options")
         self.advanced_toggle_btn.clicked.connect(self.toggle_advanced)
@@ -358,6 +364,55 @@ class LinkedInScraperGUI(QMainWindow):
             self.advanced_toggle_btn.setText("Hide Advanced Options")
         self.show_advanced = not self.show_advanced
 
+    def detect_file_encoding(self, file_path):
+        """Detect the encoding of a file using chardet"""
+        try:
+            with open(file_path, 'rb') as f:
+                # Read a sample of the file for encoding detection
+                raw_data = f.read(10000)  # Read first 10KB
+                result = chardet.detect(raw_data)
+                encoding = result['encoding']
+                confidence = result['confidence']
+
+                print(f"Detected encoding: {encoding} (confidence: {confidence:.2f})")
+                return encoding, confidence
+        except Exception as e:
+            print(f"Error detecting encoding: {e}")
+            return 'utf-8', 0.0
+
+    def load_csv_with_encoding_detection(self, file_path):
+        """Load CSV file with automatic encoding detection and fallback"""
+        encodings_to_try = []
+
+        # First, try to detect the encoding
+        detected_encoding, confidence = self.detect_file_encoding(file_path)
+
+        if detected_encoding and confidence > 0.7:
+            encodings_to_try.append(detected_encoding)
+
+        # Add common encodings as fallbacks
+        common_encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1', 'windows-1252']
+        for encoding in common_encodings:
+            if encoding not in encodings_to_try:
+                encodings_to_try.append(encoding)
+
+        # Try each encoding
+        for encoding in encodings_to_try:
+            try:
+                print(f"Trying to load CSV with encoding: {encoding}")
+                df = pd.read_csv(file_path, encoding=encoding)
+                print(f"Successfully loaded CSV with encoding: {encoding}")
+                return df, encoding
+            except UnicodeDecodeError as e:
+                print(f"Failed to load with encoding {encoding}: {e}")
+                continue
+            except Exception as e:
+                print(f"Error loading with encoding {encoding}: {e}")
+                continue
+
+        # If all encodings fail, raise an error
+        raise ValueError(f"Could not load CSV file with any of the attempted encodings: {encodings_to_try}")
+
     def check_file_modified(self, file_path):
         """Check if the file has been modified since last load"""
         if not os.path.exists(file_path):
@@ -396,11 +451,13 @@ class LinkedInScraperGUI(QMainWindow):
             # Clear the file info text first
             self.file_info_text.clear()
 
-            # Load CSV
-            self.contacts_df = pd.read_csv(input_file)
+            # Load CSV with encoding detection
+            self.contacts_df, used_encoding = self.load_csv_with_encoding_detection(input_file)
+            self.used_encoding = used_encoding  # Store for display
 
             # Add debugging information
             print(f"Loaded CSV file: {input_file}")
+            # print(f"Used encoding: {used_encoding}")
             print(f"DataFrame shape: {self.contacts_df.shape}")
             print(f"DataFrame columns: {list(self.contacts_df.columns)}")
             print(f"First few rows:")
@@ -418,12 +475,22 @@ class LinkedInScraperGUI(QMainWindow):
 
             if validation_result['is_valid']:
                 self.process_button.setEnabled(True)
+                # Show encoding info in a non-blocking way
+                if hasattr(self, 'used_encoding') and self.used_encoding != 'utf-8':
+                    print(f"CSV loaded successfully with encoding: {self.used_encoding}")
             else:
                 self.process_button.setEnabled(False)
                 QMessageBox.warning(self, "Warning", "CSV structure has issues. Please check the file information below.")
 
+        except UnicodeDecodeError as e:
+            error_msg = f"Failed to load CSV file due to encoding issues: {str(e)}\n\nPlease ensure your CSV file is saved with UTF-8 encoding."
+            QMessageBox.critical(self, "Encoding Error", error_msg)
+            print(f"Encoding error loading CSV: {e}")
+            import traceback
+            traceback.print_exc()
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to load CSV file: {str(e)}")
+            error_msg = f"Failed to load CSV file: {str(e)}"
+            QMessageBox.critical(self, "Error", error_msg)
             print(f"Error loading CSV: {e}")
             import traceback
             traceback.print_exc()
@@ -549,6 +616,14 @@ class LinkedInScraperGUI(QMainWindow):
             QMessageBox.critical(self, "Error", "Please select a CSV file first.")
             return
 
+        # Reset session log file to create a new log file for this run
+        from app.logger import reset_session_log_file, get_session_log_file
+        reset_session_log_file()
+
+        # Log which file will be used for this session
+        log_file = get_session_log_file()
+        self.thread_safe_log(f"Logging to: {os.path.basename(log_file)}")
+
         # Set DEBUG environment variable if debug mode is enabled
         if self.debug_checkbox.isChecked():
             os.environ['DEBUG'] = 'true'
@@ -563,14 +638,20 @@ class LinkedInScraperGUI(QMainWindow):
             from app.logger import refresh_logger_levels
             refresh_logger_levels()
 
-        # Show information about the login process
-        QMessageBox.information(self, "Processing Info",
-            "Processing will start in a separate thread.\n\n"
-            "A browser window will open for LinkedIn login.\n"
-            "If you need to log in manually, you'll see a 'Confirm Logged In' button in the progress area.\n"
-            "Simply click that button after you've successfully logged in.\n\n"
-            "The GUI will remain responsive during processing.\n"
-            "You can monitor progress in the progress area below.")
+        # # Show information about the login process
+        # QMessageBox.information(self, "Processing Info",
+        #     "Processing will start in a separate thread.\n\n"
+        #     "A browser window will open for LinkedIn login.\n"
+        #     "If you need to log in manually, you'll see a 'Confirm Logged In' button in the progress area.\n"
+        #     "Simply click that button after you've successfully logged in.\n\n"
+        #     "The GUI will remain responsive during processing.\n"
+        #     "You can monitor progress in the progress area below.")
+
+        # Collapse advanced options panel
+        if self.show_advanced:
+            self.advanced_group.hide()
+            self.advanced_toggle_btn.setText("Show Advanced Options")
+            self.show_advanced = False
 
         # Disable buttons during processing
         self.process_button.setEnabled(False)
@@ -629,10 +710,18 @@ class LinkedInScraperGUI(QMainWindow):
             self.thread_safe_log("Starting LinkedIn contact validation...")
             self.logger.info("Starting LinkedIn contact validation...")
 
-            # Log debug mode status
+                        # Log debug mode status
             if os.getenv('DEBUG'):
                 self.thread_safe_log("DEBUG MODE: Debug logging is enabled")
                 self.logger.debug("Debug logging is enabled")
+
+            # Log advanced settings
+            self.thread_safe_log("ADVANCED SETTINGS:")
+            self.thread_safe_log(f"  Bing Search Timeout: {self.bing_timeout_spin.value()} seconds")
+            self.thread_safe_log(f"  Search Match Threshold: {self.search_threshold_spin.value()}")
+            self.thread_safe_log(f"  LinkedIn Timeout: {self.linkedin_timeout_spin.value()} seconds")
+            self.thread_safe_log(f"  LinkedIn Match Threshold: {self.linkedin_threshold_spin.value()}%")
+            self.thread_safe_log(f"  Keep LinkedIn Browser Open: {self.keep_linkedin_open_checkbox.isChecked()}")
 
             self.thread_safe_log(f"Processing {len(working_df)} contacts")
             self.logger.info(f"Processing {len(working_df)} contacts")
@@ -646,7 +735,7 @@ class LinkedInScraperGUI(QMainWindow):
             # Define save callback
             def save_progress(df):
                 try:
-                    df.to_csv(output_file, index=False)
+                    df.to_csv(output_file, index=False, encoding='utf-8')
                     self.thread_safe_log(f"Progress saved to: {output_file}")
                     self.logger.info(f"Progress saved to: {output_file}")
                 except Exception as e:
@@ -665,12 +754,13 @@ class LinkedInScraperGUI(QMainWindow):
                 bing_timeout=self.bing_timeout_spin.value(),
                 search_threshold=self.search_threshold_spin.value(),
                 linkedin_timeout=self.linkedin_timeout_spin.value(),
-                linkedin_threshold=self.linkedin_threshold_spin.value()
+                linkedin_threshold=self.linkedin_threshold_spin.value(),
+                keep_linkedin_open=self.keep_linkedin_open_checkbox.isChecked()
             )
 
             # Save the final results
             try:
-                processed_df.to_csv(output_file, index=False)
+                processed_df.to_csv(output_file, index=False, encoding='utf-8')
             except Exception as e:
                 self.thread_safe_log(f"Error saving final results: {e}")
                 self.logger.error(f"Error saving final results: {e}")

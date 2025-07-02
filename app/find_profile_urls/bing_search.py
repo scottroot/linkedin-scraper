@@ -182,6 +182,11 @@ class BingSearch:
                             if title.endswith(suffix):
                                 title = title[:-len(suffix)].strip()
                                 break
+                    else:
+                        self.logger.debug(f"Bing: Item {i+1} - No h2 tag or empty title found")
+                        # Log the HTML structure to understand what we're dealing with
+                        self.logger.debug(f"Bing: Item {i+1} - HTML structure: {html[:200]}...")
+                        continue
                     self.logger.info(f"Bing: Item {i+1} - Title: '{title}'")
 
                     link = ""
@@ -217,6 +222,7 @@ class BingSearch:
                                         self.logger.info(f"Bing: Item {i+1} - Valid LinkedIn match found - {title} (similarity: {similarity:.2f})")
                                     else:
                                         self.logger.debug(f"Bing: Item {i+1} - Skipping low similarity match - {title} (similarity: {similarity:.2f})")
+                                        self.logger.debug(f"Bing: Item {i+1} - URL was: {real_url}")
                                 else:
                                     # Title is empty, extract name from LinkedIn URL for validation
                                     url_parts = real_url.split('/')
@@ -236,6 +242,7 @@ class BingSearch:
                                         self.logger.info(f"Bing: Item {i+1} - Including LinkedIn URL with unknown name: {real_url}")
                             else:
                                 self.logger.debug(f"Bing: Item {i+1} - Skipping non-LinkedIn redirect result: {real_url}")
+                                self.logger.debug(f"Bing: Item {i+1} - Title was: '{title}'")
                         elif "linkedin.com/in/" in link:
                             # Direct LinkedIn URL
                             self.logger.info(f"Bing: Item {i+1} - URL: {link}")
@@ -255,6 +262,7 @@ class BingSearch:
                                     self.logger.info(f"Bing: Item {i+1} - Valid LinkedIn match found - {title} (similarity: {similarity:.2f})")
                                 else:
                                     self.logger.debug(f"Bing: Item {i+1} - Skipping low similarity match - {title} (similarity: {similarity:.2f})")
+                                    self.logger.debug(f"Bing: Item {i+1} - URL was: {link}")
                             else:
                                 # Title is empty, extract name from LinkedIn URL for validation
                                 url_parts = link.split('/')
@@ -274,8 +282,9 @@ class BingSearch:
                                     self.logger.info(f"Bing: Item {i+1} - Including LinkedIn URL with unknown name: {link}")
                         else:
                             self.logger.debug(f"Bing: Item {i+1} - Skipping non-LinkedIn URL: {link}")
+                            self.logger.debug(f"Bing: Item {i+1} - Title was: '{title}'")
                     else:
-                        self.logger.debug("Bing: Item {i+1} - Skipping result with no link")
+                        self.logger.debug(f"Bing: Item {i+1} - Skipping result with no link")
                 except Exception as e:
                     self.logger.warning(f"Bing: Item {i+1} - Error processing search result item: {e}")
                     continue  # skip malformed items

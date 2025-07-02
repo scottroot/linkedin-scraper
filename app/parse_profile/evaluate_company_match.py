@@ -163,3 +163,116 @@ def check_company_match(
         'all_matches': all_matches
     }
 
+
+def check_company_match_comprehensive(
+    target_company,
+    current_positions,
+    all_positions=None,
+    threshold=75
+) -> Dict[Literal['has_current_match', 'has_any_match', 'current_match', 'any_match', 'all_matches'], Any]:
+    """
+    Comprehensive company matching that checks both current positions and all positions
+
+    Args:
+        target_company (str): Company name to search for
+        current_positions (list): List of current position dictionaries
+        all_positions (list): List of all position dictionaries (current + historical)
+        threshold (int): Minimum similarity score for a match
+
+    Returns:
+        dict: Comprehensive match information
+            {
+                'has_current_match': bool,  # True if target company matches a current position
+                'has_any_match': bool,      # True if target company matches any position (current or historical)
+                'current_match': dict,      # Best current position match (if any)
+                'any_match': dict,          # Best match from any position (if any)
+                'all_matches': list         # All matches found
+            }
+    """
+    if not current_positions and not all_positions:
+        return {
+            'has_current_match': False,
+            'has_any_match': False,
+            'current_match': None,
+            'any_match': None,
+            'all_matches': []
+        }
+
+    all_matches = []
+    current_match = None
+    any_match = None
+    best_current_score = 0
+    best_any_score = 0
+
+    # Check current positions
+    for position in current_positions:
+        if position.get('company'):
+            match_result = fuzzy_match_company(
+                target_company,
+                position['company'],
+                threshold
+            )
+
+            if match_result['is_match']:
+                match_info = {
+                    'position': position,
+                    'match_result': match_result,
+                    'is_current': True
+                }
+                all_matches.append(match_info)
+
+                # Track best current match
+                if match_result['score'] > best_current_score:
+                    best_current_score = match_result['score']
+                    current_match = match_info
+
+                # Track best overall match
+                if match_result['score'] > best_any_score:
+                    best_any_score = match_result['score']
+                    any_match = match_info
+
+    # Check all positions (if provided and different from current positions)
+    if all_positions and all_positions != current_positions:
+        for position in all_positions:
+            if position.get('company'):
+                match_result = fuzzy_match_company(
+                    target_company,
+                    position['company'],
+                    threshold
+                )
+
+                if match_result['is_match']:
+                    # Check if this position is already in current positions
+                    is_current = any(
+                        cp.get('company') == position.get('company') and
+                        cp.get('job_title') == position.get('job_title')
+                        for cp in current_positions
+                    )
+
+                    match_info = {
+                        'position': position,
+                        'match_result': match_result,
+                        'is_current': is_current
+                    }
+
+                    # Only add if not already in all_matches (avoid duplicates)
+                    if not any(
+                        m['position'].get('company') == position.get('company') and
+                        m['position'].get('job_title') == position.get('job_title')
+                        for m in all_matches
+                    ):
+                        all_matches.append(match_info)
+
+                    # Track best overall match
+                    if match_result['score'] > best_any_score:
+                        best_any_score = match_result['score']
+                        any_match = match_info
+
+    return {
+        'has_current_match': current_match is not None,
+        'has_any_match': any_match is not None,
+        'current_match': current_match,
+        'any_match': any_match,
+        'all_matches': all_matches
+    }
+

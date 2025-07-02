@@ -1,7 +1,7 @@
 First Name,Last Name,Account Name,Valid,Note
 Brittany,Koempel,Bloomberg,True,
 Anne Riley,Moffat,Bloomberg,True,
-Ian,Korovinsky,Bloomberg,False,
+Ian,Korovinsky,Bloomberg,False,Historical match found
 Sam,Brenner,Spotify,True,
-Anas,Hayajneh,AQ Network,False,
-Megan,Chang,Williams-Sheppard,False,
+Anas,Hayajneh,AQ Network,,
+Megan,Chang,Williams-Sheppard,,

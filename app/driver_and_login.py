@@ -11,12 +11,12 @@ import gc
 from app.logger import get_logger
 
 
-def get_driver(headless=False):
+def get_driver(headless=False, keep_open=False):
     """Initialize and configure Chrome WebDriver with better error handling"""
     logger = get_logger()
     try:
         chrome_options = Options()
-        if headless:
+        if headless and not keep_open:
             chrome_options.add_argument("--headless=new")
         else:
             chrome_options.add_argument("--start-maximized")
