@@ -167,3 +167,4 @@ def cleanup_driver(driver):
     finally:
         # Force garbage collection
         gc.collect()
+
