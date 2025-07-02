@@ -11,14 +11,19 @@ def normalize_company_name(company_name):
         return ""
 
     # Convert to lowercase
-    normalized = company_name.lower()
+    normalized = (company_name
+        .lower()
+        .replace(".", "")
+        .replace(",", " ")
+        .replace("  ", " ")
+    )
 
     # Remove common suffixes and prefixes
     suffixes_to_remove = [
-        'inc', 'inc.', 'incorporated', 'corp', 'corp.', 'corporation',
-        'ltd', 'ltd.', 'limited', 'llc', 'l.l.c.', 'co', 'co.', 'company',
-        'gmbh', 'ag', 'sa', 'spa', 'bv', 'nv', 'ab', 'as', 'oy', 'se',
-        'plc', 'p.l.c.', 'pty', 'pvt', 'private', 'public'
+        "inc", "incorporated", "corp", "corporation",
+        "ltd", "limited", "llc", "co", "company",
+        "gmbh", "ag", "sa", "sab", "de", "cv", "spa", "bv", "nv", "ab", "as", "oy", "se",
+        "plc", "pty", "pvt", "private", "public"
     ]
 
     # Remove suffixes

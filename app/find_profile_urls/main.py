@@ -4,6 +4,8 @@ from app.find_profile_urls.brave_search import BraveSearch
 from app.logger import get_logger
 from typing import List
 
+from app.parse_profile.evaluate_company_match import normalize_company_name
+
 
 def get_linkedin_url_candidates(name, company, driver=None, limit=5, threshold=0.6) -> List[str]:
     """
@@ -36,8 +38,10 @@ def get_linkedin_url_candidates(name, company, driver=None, limit=5, threshold=0
 
         # # If Google search fails or returns no results, fall back to Bing
         # logger.debug("Google search failed or returned no results. Falling back to Bing search...")
+
+        clean_company = normalize_company_name(company)
         bing_search = BingSearch(driver)
-        links = bing_search.run_bing_search(name, company, limit=limit, threshold=threshold)
+        links = bing_search.run_bing_search(name, clean_company, limit=limit, threshold=threshold)
         # bing_search.cleanup()
         logger.info(f"Bing search completed. Found {len(links)} URLs")
 
@@ -47,7 +51,7 @@ def get_linkedin_url_candidates(name, company, driver=None, limit=5, threshold=0
         # If both Google and Bing fail, try Brave search
         logger.info("Both Google and Bing searches failed. Trying Brave search...")
         brave_search_instance = BraveSearch()
-        brave_results = brave_search_instance.run_brave_search(name, company, limit=limit, threshold=threshold)
+        brave_results = brave_search_instance.run_brave_search(name, clean_company, limit=limit, threshold=threshold)
 
         if brave_results:
             # Extract URLs from Brave results

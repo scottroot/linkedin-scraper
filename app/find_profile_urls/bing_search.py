@@ -1,3 +1,6 @@
+import sys
+sys.path.append("/Users/scomax/Documents/Git/linkedin-scraper/")
+
 from app.driver_and_login import get_driver, cleanup_driver
 from bs4 import BeautifulSoup
 from selenium.webdriver.common.by import By
@@ -11,7 +14,7 @@ from difflib import SequenceMatcher
 
 
 class BingSearch:
-    def __init__(self, driver=None, timeout=10):
+    def __init__(self, driver=None, timeout=20):
         self.logger = get_logger()
         self.timeout = timeout
         if driver is None:
@@ -26,45 +29,29 @@ class BingSearch:
         try:
             # Parse the Bing URL to extract the real URL
             parsed = urlparse(bing_url)
-            # self.logger.info(f"Parsed URL - netloc: {parsed.netloc}, path: {parsed.path}")
 
             if 'bing.com' in parsed.netloc and ('/ck/' in parsed.path or 'u=' in parsed.query):
-                # This is a Bing redirect URL, extract the real URL
                 query_params = parse_qs(parsed.query)
 
-                # Try different parameter names that might contain the real URL
                 for param_name in ['u', 'url', 'r', 'redirect']:
                     if param_name in query_params:
                         encoded_url = query_params[param_name][0]
-                        # self.logger.info(f"Found encoded URL in parameter '{param_name}': {encoded_url}")
-
-                        # Try to decode it - it might be URL-encoded or base64
                         try:
-                            # First try URL decoding
-                            decoded_url = unquote(encoded_url).lstrip('a').lstrip('1') + "=="
-                            self.logger.info(f"URL decoded: {decoded_url}")
-
-                            # If it still looks encoded, try base64
+                            decoded_url = unquote(encoded_url)
+                            if decoded_url.startswith("a1"):
+                                decoded_url = decoded_url[2:] + "=="
                             if decoded_url.startswith('aHR0c') or len(decoded_url) > 50:
-                                try:
-                                    base64_decoded = base64.b64decode(decoded_url).decode('utf-8')
-                                    self.logger.info(f"Base64 decoded: {base64_decoded}")
-                                    # Only return if it's actually a LinkedIn URL
-                                    if 'linkedin.com/in/' in base64_decoded:
-                                        return base64_decoded
-                                    else:
-                                        self.logger.debug(f"Skipping non-LinkedIn URL from base64: {base64_decoded}")
-                                except Exception as e:
-                                    self.logger.warning(f"Base64 decode failed: {e}")
+                                return base64.b64decode(decoded_url).decode('utf-8')
 
                             # Check if the URL decoded version is valid
-                            if 'linkedin.com/in/' in decoded_url:
-                                return decoded_url
-                            else:
-                                self.logger.debug(f"Skipping non-LinkedIn URL from URL decode: {decoded_url}")
+                            # if 'linkedin.com/in/' in decoded_url:
+                            return decoded_url
+                            # else:
+                            #     self.logger.debug(f"Skipping non-LinkedIn URL from URL decode: {decoded_url}")
 
                         except Exception as e:
                             self.logger.warning(f"Error decoding URL from parameter '{param_name}': {e}")
+                            return ""
 
                 # If we can't extract it from parameters, try to follow the redirect
                 self.logger.info("Attempting to follow redirect...")
@@ -108,9 +95,10 @@ class BingSearch:
             # Store original name for comparison
             original_name = name
 
-            site = "site%3Alinkedin.com%2Fin%20"
-            name = '"' + name.replace(" ", "%20") + '"'
-            company = company.replace(" ", "%20")# + '"'
+            site = "site%3Alinkedin.com%2Fin"
+            # name = '"' + name.replace(" ", "%20") + '"'
+            name = f'"{name.replace(" ", "%20")}"'
+            company = f'"{company.replace(" ", "%20")}"'
             params = "&".join([
                 "qs=n",  # Query suggestion behavior. n means no suggestions.
                 "form=QBRE",  # Form type. QBRE means it was entered directly into the Bing search bar.
@@ -120,28 +108,42 @@ class BingSearch:
                 "sk=",  # Search keywords. Empty here, possibly reserved.
                 "ajf=100"  # Possibly related to autocomplete or justification features.
             ])
-            url = "https://www.bing.com/search?" + params + "&q=" + site + "%20" + name + "%20" + company
+            query = f"{site}%20{name}%20{company}"
+
+            url = "https://www.bing.com/search?" + params + "&q=" + query + "&pq=" + query.lower()
+
             self.logger.info(f"Searching Bing for: {name} at {company}")
+            self.logger.info(f"Search URL: {url}")
             self.bing_driver.get(url)
 
-            time.sleep(3)
             WebDriverWait(self.bing_driver, self.timeout).until(
                 EC.presence_of_element_located((By.ID, "b_results"))
             )
-            WebDriverWait(self.bing_driver, self.timeout).until(
+
+            result_container = self.bing_driver.find_element(By.ID, "b_results")
+            self.logger.info("Search results container found")
+
+            self.logger.info("Waiting for individual result items to load...")
+            WebDriverWait(self.bing_driver, self.timeout * 2).until(
                 EC.presence_of_all_elements_located((By.CSS_SELECTOR, "li.b_algo"))
             )
 
-            result_container = self.bing_driver.find_element(By.ID, "b_results")
             result_items = result_container.find_elements(By.CSS_SELECTOR, "li.b_algo")
+            self.logger.info(f"Found {len(result_items)} result items with CSS selector 'li.b_algo'")
 
-            self.logger.debug(f"Found {len(result_items)} search results")
+            WebDriverWait(self.bing_driver, self.timeout).until(
+                EC.presence_of_all_elements_located((By.TAG_NAME, "h2"))
+            )
+
+            self.logger.info(f"Found {len(result_items)} search results")
 
             validated_results = []
-            for item in result_items:
+            for i, item in enumerate(result_items):
                 if len(validated_results) >= limit:
                     break
                 try:
+                    self.logger.info(f"Processing result item {i+1}/{len(result_items)}")
+
                     html = item.get_attribute("outerHTML")
                     soup = BeautifulSoup(html, 'html.parser')
                     h2 = soup.find("h2")
@@ -162,20 +164,26 @@ class BingSearch:
                             if title.endswith(suffix):
                                 title = title[:-len(suffix)].strip()
                                 break
-                    self.logger.debug(f"Processing result - Title: '{title}'")
+                    self.logger.info(f"Item {i+1} - Title: '{title}'")
 
                     link = ""
                     a = h2.find("a")
                     if a and a.has_attr("href"):
                         link = a["href"]
-                        self.logger.debug(f"Processing result - Raw URL: {link}")
+                        self.logger.info(f"Item {i+1} - Raw URL: {link}")
+                    else:
+                        self.logger.warning(f"Item {i+1} - No href attribute found in anchor tag")
+                        if a:
+                            self.logger.debug(f"Item {i+1} - Anchor tag attributes: {a.attrs}")
 
                     if link:
+                        self.logger.info(f"Item {i+1} - Processing link: {link}")
+
                         # Handle Bing redirect URLs
                         if "bing.com" in link and ("/ck/" in link or "u=" in link):
                             # This is a Bing redirect, extract the real URL
                             real_url = self.extract_real_url_from_bing_redirect(link)
-                            self.logger.debug(f"Extracted real URL from Bing redirect: {real_url}")
+                            self.logger.debug(f"Found URL: {real_url}")
                             if real_url and "linkedin.com/in/" in real_url:
                                 # Validate the title against the name
                                 if title and title.strip():
@@ -273,3 +281,10 @@ class BingSearch:
 
     def cleanup(self):
         cleanup_driver(self.bing_driver)
+
+
+if __name__ == "__main__":
+    bing_search = BingSearch()
+
+    results = bing_search.run_bing_search("Steve Polenske", "Smart and Final Stores")
+    print(results)

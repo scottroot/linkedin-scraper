@@ -1,4 +1,8 @@
 # This module takes company names found on LinkedIn and compares them to a target company name
+import sys
+sys.path.append("/Users/scomax/Documents/Git/linkedin-scraper/")
+
+import os
 import time
 from typing import Any, Dict, List, Literal
 from selenium.webdriver.common.by import By
@@ -9,6 +13,9 @@ from bs4 import BeautifulSoup
 from app.driver_and_login import get_driver, login, cleanup_driver
 from app.parse_profile.wait_for_page_load import wait_for_page_load
 from app.logger import get_logger
+
+
+LINKEDIN_PAGE_LOAD_TIMEOUT = int(os.getenv("LINKEDIN_PAGE_LOAD_TIMEOUT", 15))
 
 
 def find_experience_section(driver, timeout=10):
@@ -129,6 +136,14 @@ def extract_position_info(item) -> Dict[Literal['job_title', 'company', 'employm
     - employment_type (str)
     - date_range (str)
     - is_current (bool)
+
+    Position with multiple roles:
+    Company = 1st title
+    Dates = 1st t-14 t-normal t-black--light
+
+    Position with single role:
+    Company = 1st span t-14 t-normal
+    Dates = 1st t-14 t-normal t-black--light /// Also span pvs-entity__caption-wrapper
     """
     logger = get_logger()
     position_info = {
@@ -141,160 +156,67 @@ def extract_position_info(item) -> Dict[Literal['job_title', 'company', 'employm
 
     try:
         # Get the HTML content of the item and parse with BeautifulSoup
-        item_html = item.get_attribute('outerHTML')
+        try:
+            item_html = item.get_attribute('outerHTML')
+        except Exception as e:
+            logger.warning(f"Stale element reference when getting HTML: {e}")
+            return position_info
+
         soup = BeautifulSoup(item_html, 'html.parser')
 
-        # Get all text elements once for use throughout the function
-        all_text_elements = soup.find_all(text=True)
+        title_divs = soup.select("div.hoverable-link-text.t-bold")
 
-        # Extract job title - look for bold text that's likely a job title
-        title_candidates = []
+        # MULTI-ROLE POSITION
+        if len(title_divs) > 1:
 
-        # Look for the specific LinkedIn job title structure
-        # div with hoverable-link-text t-bold classes containing span with aria-hidden="true"
-        title_divs = soup.find_all('div', class_='hoverable-link-text t-bold')
-        for div in title_divs:
-            # Look for span with aria-hidden="true" within the div
+            print(f"Found multiple ({len(title_divs)}) titles - this is a multi-role position.")
+            # FIND COMPANY
+            company_span = title_divs[0].find('span', attrs={'aria-hidden': 'true'})
+            if company_span:
+                company_text = company_span.get_text().strip()
+                if company_text and len(company_text) > 2:  # Filter out very short text
+                    position_info["company"] = company_text
+
+            title_span = title_divs[1].find('span', attrs={'aria-hidden': 'true'})
+            if title_span:
+                title_text = title_span.get_text().strip()
+                if title_text and len(title_text) > 2:  # Filter out very short text
+                    position_info["title"] = title_text
+
+        # SINGLE ROLE POSITION
+        elif len(title_divs) == 1:
+            print(f"Found single title - this is a single-role position.")
+            title_span = title_divs[0].find('span', attrs={'aria-hidden': 'true'})
+            if title_span:
+                title_text = title_span.get_text().strip()
+                if title_text and len(title_text) > 2:  # Filter out very short text
+                    position_info["title"] = title_text
+
+            company_spans = soup.select("span.t-14.t-normal")
+            company_span = company_spans[0].find('span', attrs={'aria-hidden': 'true'})
+            if company_span:
+                company_text = company_span.get_text().strip()
+                if company_text and len(company_text) > 2:  # Filter out very short text
+                    position_info["company"] = company_text
+
+        else:
+            print("No title found")
+
+        # FIND DATES
+        date_divs = soup.select("span.t-14.t-normal.t-black--light")
+        for div in date_divs:
             span = div.find('span', attrs={'aria-hidden': 'true'})
             if span:
-                text = span.get_text().strip()
+                text = span.get_text().strip().lower()
                 if text and len(text) > 2:  # Filter out very short text
-                    title_candidates.append(text)
-
-        # Fallback: look for elements with t-bold class
-        if not title_candidates:
-            bold_elements = soup.find_all(class_='t-bold')
-            for element in bold_elements:
-                text = element.get_text().strip()
-                if text and len(text) > 2:  # Filter out very short text
-                    title_candidates.append(text)
-
-        # Take the first meaningful title candidate and deduplicate
-        if title_candidates:
-            # Remove duplicates while preserving order
-            seen = set()
-            unique_titles = []
-            for title in title_candidates:
-                if title not in seen:
-                    seen.add(title)
-                    unique_titles.append(title)
-
-            if unique_titles:
-                position_info["job_title"] = unique_titles[0]
-                logger.debug(f"Found job title: {unique_titles[0]}")
-
-        # Extract company and employment type
-        # First, try to find company name from logo alt text
-        logo_img = soup.find('img', attrs={'alt': True})
-        if logo_img:
-            alt_text = logo_img.get('alt', '').strip()
-            if alt_text.endswith(' logo'):
-                company_name = alt_text[:-5]  # Remove " logo" from the end
-                if company_name:
-                    position_info["company"] = company_name
-                    logger.debug(f"Found company from logo alt text: {company_name}")
-
-        # If we didn't find company from logo, fall back to text-based extraction
-        if not position_info["company"]:
-            company_candidates = []
-
-            for text in all_text_elements:
-                text_clean = text.strip()
-                if text_clean and "·" in text_clean:
-                    company_candidates.append(text_clean)
-
-            # Also look for elements with t-14 class (common for company info)
-            t14_elements = soup.find_all(class_='t-14')
-            for element in t14_elements:
-                text = element.get_text().strip()
-                if text and len(text) > 2:
-                    company_candidates.append(text)
-
-            # Process company candidates
-            for candidate in company_candidates:
-                if "·" in candidate:
-                    parts = candidate.split("·")
-                    company_part = parts[0].strip()
-                    if company_part and len(company_part) > 1:
-                        position_info["company"] = company_part
-                        if len(parts) > 1:
-                            position_info["employment_type"] = parts[1].strip()
-                        break
-                elif not position_info["company"] and len(candidate) > 2:
-                    # If no bullet separator, use as company if we don't have one yet
-                    position_info["company"] = candidate
-
-        # Extract date range and determine if current
-        date_candidates = []
-
-        # Look for date-like text patterns in all text elements
-        for text in all_text_elements:
-            text_clean = text.strip()
-            if text_clean and len(text_clean) > 2:
-                # Check for date patterns
-                text_lower = text_clean.lower()
-                if any(word in text_lower for word in ["present", "current", "now", "today", "month", "year", "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]):
-                    # Additional validation: check if it looks like a date range
-                    if any(char.isdigit() for char in text_clean) or any(word in text_lower for word in ["present", "current", "now", "today"]):
-                        date_candidates.append(text_clean)
-
-        # Look for specific date elements with t-14 class (common for dates)
-        t14_elements = soup.find_all(class_='t-14')
-        for element in t14_elements:
-            text = element.get_text().strip()
-            if text and len(text) > 2:
-                text_lower = text.lower()
-                # Check if this looks like a date (contains numbers or date keywords)
-                if any(char.isdigit() for char in text) or any(word in text_lower for word in ["present", "current", "now", "today", "month", "year", "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]):
-                    # Avoid duplicates
-                    if text not in date_candidates:
-                        date_candidates.append(text)
-
-        # Look for elements with t-normal class (also common for dates)
-        t_normal_elements = soup.find_all(class_='t-normal')
-        for element in t_normal_elements:
-            text = element.get_text().strip()
-            if text and len(text) > 2:
-                text_lower = text.lower()
-                if any(char.isdigit() for char in text) or any(word in text_lower for word in ["present", "current", "now", "today", "month", "year", "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]):
-                    if text not in date_candidates:
-                        date_candidates.append(text)
-
-        # Look for elements with t-black--light class (often used for dates)
-        t_black_light_elements = soup.find_all(class_='t-black--light')
-        for element in t_black_light_elements:
-            text = element.get_text().strip()
-            if text and len(text) > 2:
-                text_lower = text.lower()
-                if any(char.isdigit() for char in text) or any(word in text_lower for word in ["present", "current", "now", "today", "month", "year", "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]):
-                    if text not in date_candidates:
-                        date_candidates.append(text)
-
-        # Process date candidates - prioritize by relevance
-        for candidate in date_candidates:
-            candidate_lower = candidate.lower()
-
-            # Check if it's a current position indicator
-            if any(word in candidate_lower for word in ["present", "current", "now", "today"]):
-                position_info["date_range"] = candidate
-                position_info["is_current"] = True
-                logger.debug(f"Found current position date: {candidate}")
-                break
-            # Check if it contains date patterns
-            elif any(word in candidate_lower for word in ["month", "year", "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]) or any(char.isdigit() for char in candidate):
-                # Additional validation: should not be the same as job title
-                if candidate != position_info["job_title"]:
-                    position_info["date_range"] = candidate
-                    logger.debug(f"Found date range: {candidate}")
-                    break
-
-        # If we still don't have a date range, try to infer if it's current
-        if not position_info["date_range"] and position_info["job_title"]:
-            # Check if the item itself suggests it's current
-            item_text = soup.get_text().lower()
-            if "present" in item_text or "current" in item_text:
-                position_info["is_current"] = True
-                logger.debug("Inferred current position from item text")
+                    if any(word in text for word in ["present", "current", "now", "today", "month", "year", "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]):
+                        # Additional validation: check if it looks like a date range
+                        if any(char.isdigit() for char in text) or any(word in text for word in ["present", "current", "now", "today"]):
+                            # date_range = text.split("·")[0].strip()
+                            position_info["date_range"] = date_range = text.split("·")[0].strip()
+                            if any(word in text for word in ["present", "current", "now", "today"]):
+                                position_info["is_current"] = True
+                            break
 
     except Exception as e:
         logger.error(f"Error extracting position info: {e}")
@@ -320,24 +242,32 @@ def get_current_employer(
     current_positions = []
 
     try:
-        # Navigate to profile
         logger.info(f"Navigating to profile: {profile_url}")
         driver.get(profile_url)
 
         # Wait for page to load
-        if not wait_for_page_load(driver):
-            logger.error("Failed to wait for page load")
-            return []
+        # if not wait_for_page_load(driver):
+        #     logger.error("Failed to wait for page load")
+        #     return []
+        try:
+            WebDriverWait(driver, LINKEDIN_PAGE_LOAD_TIMEOUT).until(
+                EC.presence_of_element_located((By.TAG_NAME, "main"))
+            )
+        except TimeoutException:
+            WebDriverWait(driver, LINKEDIN_PAGE_LOAD_TIMEOUT).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+
+        WebDriverWait(driver, LINKEDIN_PAGE_LOAD_TIMEOUT * 2).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "li.artdeco-list__item"))
+        )
 
         logger.debug("Page loaded successfully, looking for experience section...")
 
-        # Find experience sections
         experience_sections = find_experience_section(driver)
-
         if not experience_sections:
             logger.warning("No experience sections found")
             return []
-
         logger.debug(f"Found {len(experience_sections)} experience sections")
 
         # Process each experience section
@@ -347,50 +277,52 @@ def get_current_employer(
             # Try different selectors for experience items
             item_selectors = [
                 "li.artdeco-list__item",
-                # ".pvs-list__item",
-                # ".pv-entity__position-group-pager",
-                # ".pv-profile-section__list-item",
-                # ".pvs-list__item--line-separated",
-                # ".pvs-entity",
                 ".artdeco-list__item",
                 "li",
-                # ".pvs-list__item--with-top-padding"
             ]
 
-            experience_items = []
+            # Process items immediately after finding them to avoid stale element issues
             for selector in item_selectors:
                 try:
                     items = section.find_elements(By.CSS_SELECTOR, selector)
                     if items:
-                        experience_items = items
                         logger.info(f"Found {len(items)} experience items with selector: {selector}")
+
+                        # Process each item immediately to avoid stale element issues
+                        for item_idx, item in enumerate(items):
+                            try:
+                                # Get the HTML content immediately to avoid stale element issues
+                                position_info = extract_position_info(item)
+
+                                logger.info(f"Item {item_idx + 1}:")
+                                logger.info(f"  Title: {position_info['job_title']}")
+                                logger.info(f"  Company: {position_info['company']}")
+                                logger.info(f"  Date: {position_info['date_range']}")
+                                logger.info(f"  Current: {position_info['is_current']}")
+
+                                # Only add if we found meaningful information and it's current
+                                if position_info['is_current'] and (position_info['job_title'] or position_info['company']):
+                                    current_positions.append(position_info)
+                                    logger.info(f"  -> Added to current positions")
+
+                            except Exception as e:
+                                logger.error(f"Error processing item {item_idx + 1}: {e}")
+                                continue
+
+                            # Small delay to prevent overwhelming the page
+                            time.sleep(0.1)
+
+                        # If we successfully processed items with this selector, break
                         break
+
                 except Exception as e:
+                    logger.debug(f"Selector {selector} failed: {e}")
                     continue
 
-            if not experience_items:
-                logger.warning(f"No experience items found in section {section_idx + 1}")
+            # If we found and processed items in this section, we can move to the next section
+            if current_positions:
+                logger.debug(f"Found current positions in section {section_idx + 1}, moving to next section")
                 continue
-
-            # Process each experience item
-            for item_idx, item in enumerate(experience_items):
-                try:
-                    position_info = extract_position_info(item)
-
-                    logger.info(f"Item {item_idx + 1}:")
-                    logger.info(f"  Title: {position_info['job_title']}")
-                    logger.info(f"  Company: {position_info['company']}")
-                    logger.info(f"  Date: {position_info['date_range']}")
-                    logger.info(f"  Current: {position_info['is_current']}")
-
-                    # Only add if we found meaningful information and it's current
-                    if position_info['is_current'] and (position_info['job_title'] or position_info['company']):
-                        current_positions.append(position_info)
-                        logger.info(f"  -> Added to current positions")
-
-                except Exception as e:
-                    logger.error(f"Error processing item {item_idx + 1}: {e}")
-                    continue
 
         logger.info(f"Total current positions found: {len(current_positions)}")
         return current_positions
@@ -402,3 +334,12 @@ def get_current_employer(
     except Exception as e:
         logger.error(f"Error in get_current_employer: {e}")
         return []
+
+
+if __name__ == "__main__":
+    driver = get_driver(headless=True)
+    login(driver)
+    profile_url = "https://www.linkedin.com/in/david-pacheco-it/"
+    result = get_current_employer(driver, profile_url)
+    print(result)
+    cleanup_driver(driver)

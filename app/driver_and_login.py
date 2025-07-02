@@ -146,9 +146,22 @@ def cleanup_driver(driver):
     logger = get_logger()
     try:
         if driver:
-            # Close all windows
-            driver.close()
-            driver.quit()
+            # Check if driver is still responsive before trying to close
+            try:
+                # Try to get current URL to test if driver is still responsive
+                driver.current_url
+                # If we get here, driver is responsive, so close it properly
+                driver.close()
+                driver.quit()
+                logger.info("Driver closed successfully")
+            except Exception as e:
+                # Driver is not responsive, just log and continue
+                logger.debug(f"Driver already closed or unresponsive: {e}")
+                # Force quit anyway
+                try:
+                    driver.quit()
+                except:
+                    pass
     except Exception as e:
         logger.error(f"Error closing driver: {e}")
     finally:
