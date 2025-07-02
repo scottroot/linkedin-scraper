@@ -345,7 +345,8 @@ def get_current_employer(
 if __name__ == "__main__":
     driver = get_driver(headless=True)
     login(driver)
-    profile_url = "https://www.linkedin.com/in/david-pacheco-it/"
+    profile_url = "https://www.linkedin.com/in/abhi-p-11004211/"
     result = get_current_employer(driver, profile_url)
     print(result)
     cleanup_driver(driver)
+

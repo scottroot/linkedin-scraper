@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QLineEdit, QPushButton, QTextEdit,
     QProgressBar, QFileDialog, QMessageBox, QGroupBox, QFrame,
-    QSpinBox, QCheckBox, QScrollArea, QSizePolicy
+    QSpinBox, QDoubleSpinBox, QCheckBox, QScrollArea, QSizePolicy
 )
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QFont, QTextCursor
@@ -209,6 +209,56 @@ class LinkedInScraperGUI(QMainWindow):
         advanced_layout.addWidget(delay_label, 3, 0)
         advanced_layout.addWidget(self.delay_spin, 3, 1)
         advanced_layout.addWidget(delay_help, 3, 2)
+
+        # Debug Mode
+        self.debug_checkbox = QCheckBox("Enable Debug Mode")
+        self.debug_checkbox.setToolTip("Enable debug logging (sets DEBUG environment variable)")
+        advanced_layout.addWidget(self.debug_checkbox, 4, 0, 1, 3)
+
+        # Bing Search Result Timeout
+        bing_timeout_label = QLabel("Bing Search Timeout (seconds):")
+        self.bing_timeout_spin = QSpinBox()
+        self.bing_timeout_spin.setMinimum(5)
+        self.bing_timeout_spin.setMaximum(120)
+        self.bing_timeout_spin.setValue(20)
+        bing_timeout_help = QLabel("(timeout for Bing search results)")
+        advanced_layout.addWidget(bing_timeout_label, 5, 0)
+        advanced_layout.addWidget(self.bing_timeout_spin, 5, 1)
+        advanced_layout.addWidget(bing_timeout_help, 5, 2)
+
+        # Search Result Match Threshold
+        search_threshold_label = QLabel("Search Match Threshold:")
+        self.search_threshold_spin = QDoubleSpinBox()
+        self.search_threshold_spin.setMinimum(0.1)
+        self.search_threshold_spin.setMaximum(1.0)
+        self.search_threshold_spin.setSingleStep(0.1)
+        self.search_threshold_spin.setValue(0.6)
+        search_threshold_help = QLabel("(Bing/Brave search fuzzy match threshold)")
+        advanced_layout.addWidget(search_threshold_label, 6, 0)
+        advanced_layout.addWidget(self.search_threshold_spin, 6, 1)
+        advanced_layout.addWidget(search_threshold_help, 6, 2)
+
+        # LinkedIn Selenium Timeout
+        linkedin_timeout_label = QLabel("LinkedIn Timeout (seconds):")
+        self.linkedin_timeout_spin = QSpinBox()
+        self.linkedin_timeout_spin.setMinimum(5)
+        self.linkedin_timeout_spin.setMaximum(120)
+        self.linkedin_timeout_spin.setValue(15)
+        linkedin_timeout_help = QLabel("(timeout for LinkedIn page loading)")
+        advanced_layout.addWidget(linkedin_timeout_label, 7, 0)
+        advanced_layout.addWidget(self.linkedin_timeout_spin, 7, 1)
+        advanced_layout.addWidget(linkedin_timeout_help, 7, 2)
+
+        # LinkedIn Match Threshold
+        linkedin_threshold_label = QLabel("LinkedIn Match Threshold:")
+        self.linkedin_threshold_spin = QSpinBox()
+        self.linkedin_threshold_spin.setMinimum(50)
+        self.linkedin_threshold_spin.setMaximum(100)
+        self.linkedin_threshold_spin.setValue(75)
+        linkedin_threshold_help = QLabel("(company name match threshold %)")
+        advanced_layout.addWidget(linkedin_threshold_label, 8, 0)
+        advanced_layout.addWidget(self.linkedin_threshold_spin, 8, 1)
+        advanced_layout.addWidget(linkedin_threshold_help, 8, 2)
 
         # Advanced toggle button
         self.advanced_toggle_btn = QPushButton("Show Advanced Options")
@@ -499,6 +549,20 @@ class LinkedInScraperGUI(QMainWindow):
             QMessageBox.critical(self, "Error", "Please select a CSV file first.")
             return
 
+        # Set DEBUG environment variable if debug mode is enabled
+        if self.debug_checkbox.isChecked():
+            os.environ['DEBUG'] = 'true'
+            self.thread_safe_log("Debug mode enabled - DEBUG environment variable set to 'true'")
+            # Refresh logger levels to apply debug mode to existing loggers
+            from app.logger import refresh_logger_levels
+            refresh_logger_levels()
+        else:
+            # Remove DEBUG environment variable if it exists
+            os.environ.pop('DEBUG', None)
+            # Refresh logger levels to apply normal mode to existing loggers
+            from app.logger import refresh_logger_levels
+            refresh_logger_levels()
+
         # Show information about the login process
         QMessageBox.information(self, "Processing Info",
             "Processing will start in a separate thread.\n\n"
@@ -564,6 +628,12 @@ class LinkedInScraperGUI(QMainWindow):
             # Process contacts
             self.thread_safe_log("Starting LinkedIn contact validation...")
             self.logger.info("Starting LinkedIn contact validation...")
+
+            # Log debug mode status
+            if os.getenv('DEBUG'):
+                self.thread_safe_log("DEBUG MODE: Debug logging is enabled")
+                self.logger.debug("Debug logging is enabled")
+
             self.thread_safe_log(f"Processing {len(working_df)} contacts")
             self.logger.info(f"Processing {len(working_df)} contacts")
             self.thread_safe_log(f"Batch size: {self.batch_size_spin.value()}")
@@ -591,7 +661,11 @@ class LinkedInScraperGUI(QMainWindow):
                 log_callback=self.thread_safe_log,  # Use thread-safe logging for GUI
                 save_callback=save_progress,
                 stop_flag=self.stop_event,
-                login_confirmation_callback=self.login_confirmation_callback
+                login_confirmation_callback=self.login_confirmation_callback,
+                bing_timeout=self.bing_timeout_spin.value(),
+                search_threshold=self.search_threshold_spin.value(),
+                linkedin_timeout=self.linkedin_timeout_spin.value(),
+                linkedin_threshold=self.linkedin_threshold_spin.value()
             )
 
             # Save the final results
@@ -625,6 +699,9 @@ class LinkedInScraperGUI(QMainWindow):
         """Thread-safe logging method"""
         try:
             self.message_queue.put(("log", message))
+            # Also log to file if debug mode is enabled
+            if os.getenv('DEBUG'):
+                self.logger.debug(f"GUI Log: {message}")
         except Exception as e:
             self.logger.error(f"Error queuing log message: {e}")
 

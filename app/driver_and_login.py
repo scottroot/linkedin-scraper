@@ -141,30 +141,53 @@ def login(driver, login_confirmation_callback=None):
         raise
 
 
-def cleanup_driver(driver):
+def cleanup_driver(driver, driver_name="Driver"):
     """Safely cleanup WebDriver resources"""
     logger = get_logger()
     try:
         if driver:
-            # Check if driver is still responsive before trying to close
             try:
-                # Try to get current URL to test if driver is still responsive
-                driver.current_url
-                # If we get here, driver is responsive, so close it properly
                 driver.close()
                 driver.quit()
-                logger.info("Driver closed successfully")
+                logger.info(f"{driver_name} closed successfully")
             except Exception as e:
                 # Driver is not responsive, just log and continue
-                logger.debug(f"Driver already closed or unresponsive: {e}")
+                logger.debug(f"{driver_name} already closed or unresponsive: {e}")
                 # Force quit anyway
                 try:
                     driver.quit()
                 except:
                     pass
     except Exception as e:
-        logger.error(f"Error closing driver: {e}")
+        logger.warning(f"Error closing {driver_name}: {e}")
     finally:
         # Force garbage collection
         gc.collect()
 
+
+def health_check_driver(driver, driver_name="Driver"):
+    """
+    Check if a WebDriver instance is still responsive and healthy.
+
+    Args:
+        driver: WebDriver instance to check
+        driver_name: Name of the driver for logging purposes
+
+    Returns:
+        bool: True if driver is healthy, False if it's unresponsive
+    """
+    logger = get_logger()
+    try:
+        if not driver:
+            logger.warning(f"{driver_name}: Driver is None")
+            return False
+
+        # Test if browser is still responsive by accessing current_url
+        driver.current_url
+        logger.debug(f"{driver_name}: Health check passed")
+        return True
+
+    except Exception as e:
+        logger.warning(f"{driver_name}: Health check failed - {str(e)}")
+        cleanup_driver(driver, driver_name)
+        return False

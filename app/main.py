@@ -3,7 +3,6 @@ import os
 import re
 import time
 import gc
-from typing import Literal
 from app.parse_profile import get_positions_and_company_match
 from app.parse_profile.extract_experience import get_current_employer
 from fuzzywuzzy import fuzz
@@ -11,29 +10,13 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
-from app.driver_and_login import get_driver, login, cleanup_driver
+from app.driver_and_login import get_driver, login, cleanup_driver, health_check_driver
 from app.find_profile_urls import get_linkedin_url_candidates
 import pandas as pd
 from app.logger import get_logger
 
 
-def health_check(driver, driver_name: Literal["LinkedIn", "Bing"], search_count, log, login_confirmation_callback=None):
-    try:
-        # Test if browsers are still responsive
-        driver.current_url  # This will throw an exception if browser is dead
-        log(f"Search #{search_count}: {driver_name} browser health check - OK")
-    except Exception as e:
-        log(f"Search #{search_count}: WARNING - Browser health check failed: {str(e)}")
-        try:
-            cleanup_driver(driver)
-        except:
-            pass
-        driver = get_driver(headless=True)
-        if driver_name == "LinkedIn":
-            login(driver, login_confirmation_callback)
-        log(f"{driver_name} browser restarted successfully")
 
-    return driver
 
 
 def process_one_contact(
@@ -51,29 +34,6 @@ def process_one_contact(
     Process one contact, checking employment status and updating the CSV
     """
     try:
-        # Check browser health before each search
-        try:
-            if bing_driver:
-                bing_driver.current_url  # Test if browser is responsive
-            if linkedin_driver:
-                linkedin_driver.current_url  # Test if browser is responsive
-        except Exception as browser_error:
-            print(f"Browser health check failed: {browser_error}")
-            log("Attempting to restart browsers...")
-            # Restart browsers if they're unresponsive
-            if bing_driver:
-                cleanup_driver(bing_driver)
-            if linkedin_driver:
-                cleanup_driver(linkedin_driver)
-
-            # Reinitialize browsers
-            bing_driver = get_driver(headless=True)
-            if os.path.exists("linkedin_cookies.json"):
-                linkedin_driver = get_driver(headless=True)
-            else:
-                linkedin_driver = get_driver(headless=False)
-            login(linkedin_driver, login_confirmation_callback)
-            log("Browsers restarted successfully")
 
         # Get LinkedIn URL candidates
         url_candidates = get_linkedin_url_candidates(
@@ -133,7 +93,19 @@ def process_one_contact(
             log(f"Search #{search_count} (Row {idx+1}): WARNING - Error occurred around the 50-contact mark. This might indicate rate limiting or resource issues.")
 
 
-def process_contacts_batch(contacts_df, batch_size=1, delay_between_batches=10, log_callback=None, save_callback=None, stop_flag=None, login_confirmation_callback=None):
+def process_contacts_batch(
+        contacts_df,
+        batch_size=1,
+        delay_between_batches=10,
+        log_callback=None,
+        save_callback=None,
+        stop_flag=None,
+        login_confirmation_callback=None,
+        bing_timeout=20,
+        search_threshold=0.6,
+        linkedin_timeout=15,
+        linkedin_threshold=75
+    ):
     """
     Process contacts in batches, checking employment status and updating the CSV
 
@@ -222,6 +194,22 @@ def process_contacts_batch(contacts_df, batch_size=1, delay_between_batches=10, 
                 search_count += 1
                 log(f"Search #{search_count} (Row {idx+1}): Checking {full_name} at {company_name}")
 
+                # Health check before processing each contact
+                if not health_check_driver(linkedin_driver, "LinkedIn"):
+                    log(f"Search #{search_count} (Row {idx+1}): Restarting LinkedIn driver...")
+
+                    if os.path.exists("linkedin_cookies.json"):
+                        linkedin_driver = get_driver(headless=True)
+                    else:
+                        linkedin_driver = get_driver(headless=False)
+                    login(linkedin_driver, login_confirmation_callback)
+                    log("LinkedIn driver restarted successfully")
+
+                if not health_check_driver(bing_driver, "Bing"):
+                    log(f"Search #{search_count} (Row {idx+1}): Restarting Bing driver...")
+                    bing_driver = get_driver(headless=True)
+                    log("Bing driver restarted successfully")
+
                 process_one_contact(
                     full_name,
                     company_name,
@@ -244,11 +232,6 @@ def process_contacts_batch(contacts_df, batch_size=1, delay_between_batches=10, 
                     contacts_df.to_csv('contacts.csv', index=False)
 
                 log(f"Batch {i//batch_size + 1} completed and saved")
-
-                # Check browser health every 10 searches
-                if search_count % 10 == 0:
-                    linkedin_driver = health_check(linkedin_driver, "LinkedIn", search_count, log, login_confirmation_callback)
-                    bing_driver = health_check(bing_driver, "Bing", search_count, log, login_confirmation_callback)
 
                 gc.collect()
 

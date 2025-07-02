@@ -40,7 +40,13 @@ class BingSearch:
                             decoded_url = unquote(encoded_url)
                             if decoded_url.startswith("a1"):
                                 decoded_url = decoded_url[2:] + "=="
+
+                            # Ensure proper base64 padding
                             if decoded_url.startswith('aHR0c') or len(decoded_url) > 50:
+                                # Add padding if needed
+                                padding_needed = len(decoded_url) % 4
+                                if padding_needed:
+                                    decoded_url += '=' * (4 - padding_needed)
                                 return base64.b64decode(decoded_url).decode('utf-8')
 
                             # Check if the URL decoded version is valid
@@ -83,7 +89,7 @@ class BingSearch:
             self.logger.warning(f"Error extracting real URL from Bing redirect: {e}")
             return bing_url
 
-    def run_bing_search(self, name, company, limit=5, threshold=0.6):
+    def run_bing_search(self, name, company, limit=5, threshold=0.6, quoted_query=True):
         try:
             # Ensure name and company are strings
             if not isinstance(name, str):
@@ -92,13 +98,26 @@ class BingSearch:
                 self.logger.warning(f"Missing company for {name}")
                 return []
 
-            # Store original name for comparison
+            # Store original name and company for comparison and potential retry
             original_name = name
+            original_company = company
 
             site = "site%3Alinkedin.com%2Fin"
             # name = '"' + name.replace(" ", "%20") + '"'
-            name = f'"{name.replace(" ", "%20")}"'
-            company = f'"{company.replace(" ", "%20")}"'
+            quoted_name = f'"{name.replace(" ", "%20")}"'
+            quoted_company = f'"{company.replace(" ", "%20")}"'
+
+            if quoted_query:
+                name = quoted_name
+                company = quoted_company
+                self.logger.info(f"""Searching Bing for contact with quotes around name and company: "{original_name}" "{original_company}" """)
+                pq = ""
+            else:
+                name = name.replace(" ", "%20")
+                company = company.replace(" ", "%20")
+                self.logger.info(f"""Searching Bing for contact with no quotes - site:linkedin.com/in {original_name} {original_company}""")
+                pq = f"{site}%20{quoted_name}%20{quoted_company}".lower()
+
             params = "&".join([
                 "qs=n",  # Query suggestion behavior. n means no suggestions.
                 "form=QBRE",  # Form type. QBRE means it was entered directly into the Bing search bar.
@@ -110,10 +129,9 @@ class BingSearch:
             ])
             query = f"{site}%20{name}%20{company}"
 
-            url = "https://www.bing.com/search?" + params + "&q=" + query + "&pq=" + query.lower()
+            url = "https://www.bing.com/search?" + params + "&q=" + query + "&pq=" + pq
 
-            self.logger.info(f"Searching Bing for: {name} at {company}")
-            self.logger.info(f"Search URL: {url}")
+            self.logger.info(f"Raw Bing Search URL: {url}")
             self.bing_driver.get(url)
 
             WebDriverWait(self.bing_driver, self.timeout).until(
@@ -121,15 +139,15 @@ class BingSearch:
             )
 
             result_container = self.bing_driver.find_element(By.ID, "b_results")
-            self.logger.info("Search results container found")
+            self.logger.debug("Search results container found")
 
-            self.logger.info("Waiting for individual result items to load...")
+            self.logger.debug("Waiting for individual result items to load...")
             WebDriverWait(self.bing_driver, self.timeout * 2).until(
                 EC.presence_of_all_elements_located((By.CSS_SELECTOR, "li.b_algo"))
             )
 
             result_items = result_container.find_elements(By.CSS_SELECTOR, "li.b_algo")
-            self.logger.info(f"Found {len(result_items)} result items with CSS selector 'li.b_algo'")
+            self.logger.debug(f"Found {len(result_items)} result items with CSS selector 'li.b_algo'")
 
             WebDriverWait(self.bing_driver, self.timeout).until(
                 EC.presence_of_all_elements_located((By.TAG_NAME, "h2"))
@@ -142,7 +160,7 @@ class BingSearch:
                 if len(validated_results) >= limit:
                     break
                 try:
-                    self.logger.info(f"Processing result item {i+1}/{len(result_items)}")
+                    self.logger.debug(f"Processing result item {i+1}/{len(result_items)}")
 
                     html = item.get_attribute("outerHTML")
                     soup = BeautifulSoup(html, 'html.parser')
@@ -164,28 +182,26 @@ class BingSearch:
                             if title.endswith(suffix):
                                 title = title[:-len(suffix)].strip()
                                 break
-                    self.logger.info(f"Item {i+1} - Title: '{title}'")
+                    self.logger.info(f"Bing: Item {i+1} - Title: '{title}'")
 
                     link = ""
                     a = h2.find("a")
                     if a and a.has_attr("href"):
                         link = a["href"]
-                        self.logger.info(f"Item {i+1} - Raw URL: {link}")
+                        self.logger.debug(f"Bing: Item {i+1} - Raw URL: {link}")
                     else:
-                        self.logger.warning(f"Item {i+1} - No href attribute found in anchor tag")
+                        self.logger.warning(f"Bing: Item {i+1} - No href attribute found in anchor tag")
                         if a:
-                            self.logger.debug(f"Item {i+1} - Anchor tag attributes: {a.attrs}")
+                            self.logger.debug(f"Bing: Item {i+1} - Anchor tag attributes: {a.attrs}")
 
                     if link:
-                        self.logger.info(f"Item {i+1} - Processing link: {link}")
+                        self.logger.debug(f"Bing: Item {i+1} - Processing link: {link}")
 
                         # Handle Bing redirect URLs
                         if "bing.com" in link and ("/ck/" in link or "u=" in link):
-                            # This is a Bing redirect, extract the real URL
                             real_url = self.extract_real_url_from_bing_redirect(link)
-                            self.logger.debug(f"Found URL: {real_url}")
+                            self.logger.info(f"Bing: Item {i+1} - URL: {real_url}")
                             if real_url and "linkedin.com/in/" in real_url:
-                                # Validate the title against the name
                                 if title and title.strip():
                                     # Clean title for comparison - remove location info
                                     clean_title = title
@@ -194,34 +210,35 @@ class BingSearch:
                                         clean_title = clean_title.split(" - ")[0].strip()
 
                                     similarity = SequenceMatcher(None, original_name.lower(), clean_title.lower()).ratio()
-                                    self.logger.info(f"Comparing '{original_name}' with '{clean_title}' (similarity: {similarity:.2f})")
+                                    self.logger.info(f"Bing: Item {i+1} - Comparing '{original_name}' with '{clean_title}' (similarity: {similarity:.2f})")
 
                                     if similarity >= threshold:
                                         validated_results.append((real_url, title, similarity))
-                                        self.logger.debug(f"Bing: Valid match found - {title} (similarity: {similarity:.2f})")
+                                        self.logger.info(f"Bing: Item {i+1} - Valid LinkedIn match found - {title} (similarity: {similarity:.2f})")
                                     else:
-                                        self.logger.debug(f"Bing: Skipping low similarity match - {title} (similarity: {similarity:.2f})")
+                                        self.logger.debug(f"Bing: Item {i+1} - Skipping low similarity match - {title} (similarity: {similarity:.2f})")
                                 else:
                                     # Title is empty, extract name from LinkedIn URL for validation
                                     url_parts = real_url.split('/')
                                     if len(url_parts) >= 5:
                                         profile_name = url_parts[4].replace('-', ' ').replace('_', ' ')
                                         similarity = SequenceMatcher(None, original_name.lower(), profile_name.lower()).ratio()
-                                        self.logger.debug(f"Comparing '{original_name}' with '{profile_name}' from URL (similarity: {similarity:.2f})")
+                                        self.logger.debug(f"Bing: Item {i+1} - Comparing '{original_name}' with '{profile_name}' from URL (similarity: {similarity:.2f})")
 
                                         if similarity >= threshold:
                                             validated_results.append((real_url, profile_name, similarity))
-                                            self.logger.debug(f"Bing: Valid match found (from URL) - {profile_name} (similarity: {similarity:.2f})")
+                                            self.logger.info(f"Bing: Item {i+1} - Valid LinkedIn match found (from URL) - {profile_name} (similarity: {similarity:.2f})")
                                         else:
-                                            self.logger.debug(f"Bing: Skipping low similarity match (from URL) - {profile_name} (similarity: {similarity:.2f})")
+                                            self.logger.debug(f"Bing: Item {i+1} - Skipping low similarity match (from URL) - {profile_name} (similarity: {similarity:.2f})")
                                     else:
                                         # If we can't extract name from URL, include with lower confidence
                                         validated_results.append((real_url, "Unknown", 0.5))
-                                        self.logger.debug(f"Bing: Including URL with unknown name: {real_url}")
+                                        self.logger.info(f"Bing: Item {i+1} - Including LinkedIn URL with unknown name: {real_url}")
                             else:
-                                self.logger.debug(f"Bing: Skipping non-LinkedIn redirect result: {real_url}")
+                                self.logger.debug(f"Bing: Item {i+1} - Skipping non-LinkedIn redirect result: {real_url}")
                         elif "linkedin.com/in/" in link:
                             # Direct LinkedIn URL
+                            self.logger.info(f"Bing: Item {i+1} - URL: {link}")
                             # Validate the title against the name
                             if title and title.strip():
                                 # Clean title for comparison - remove location info
@@ -231,48 +248,54 @@ class BingSearch:
                                     clean_title = clean_title.split(" - ")[0].strip()
 
                                 similarity = SequenceMatcher(None, original_name.lower(), clean_title.lower()).ratio()
-                                self.logger.debug(f"Comparing '{original_name}' with '{clean_title}' (similarity: {similarity:.2f})")
+                                self.logger.debug(f"Bing: Item {i+1} - Comparing '{original_name}' with '{clean_title}' (similarity: {similarity:.2f})")
 
                                 if similarity >= threshold:
                                     validated_results.append((link, title, similarity))
-                                    self.logger.debug(f"Bing: Valid match found - {title} (similarity: {similarity:.2f})")
+                                    self.logger.info(f"Bing: Item {i+1} - Valid LinkedIn match found - {title} (similarity: {similarity:.2f})")
                                 else:
-                                    self.logger.debug(f"Bing: Skipping low similarity match - {title} (similarity: {similarity:.2f})")
+                                    self.logger.debug(f"Bing: Item {i+1} - Skipping low similarity match - {title} (similarity: {similarity:.2f})")
                             else:
                                 # Title is empty, extract name from LinkedIn URL for validation
                                 url_parts = link.split('/')
                                 if len(url_parts) >= 5:
                                     profile_name = url_parts[4].replace('-', ' ').replace('_', ' ')
                                     similarity = SequenceMatcher(None, original_name.lower(), profile_name.lower()).ratio()
-                                    self.logger.debug(f"Comparing '{original_name}' with '{profile_name}' from URL (similarity: {similarity:.2f})")
+                                    self.logger.debug(f"Bing: Item {i+1} - Comparing '{original_name}' with '{profile_name}' from URL (similarity: {similarity:.2f})")
 
                                     if similarity >= threshold:
                                         validated_results.append((link, profile_name, similarity))
-                                        self.logger.debug(f"Bing: Valid match found (from URL) - {profile_name} (similarity: {similarity:.2f})")
+                                        self.logger.info(f"Bing: Item {i+1} - Valid LinkedIn match found (from URL) - {profile_name} (similarity: {similarity:.2f})")
                                     else:
-                                        self.logger.debug(f"Bing: Skipping low similarity match (from URL) - {profile_name} (similarity: {similarity:.2f})")
+                                        self.logger.debug(f"Bing: Item {i+1} - Skipping low similarity match (from URL) - {profile_name} (similarity: {similarity:.2f})")
                                 else:
                                     # If we can't extract name from URL, include with lower confidence
                                     validated_results.append((link, "Unknown", 0.5))
-                                    self.logger.debug(f"Bing: Including URL with unknown name: {link}")
+                                    self.logger.info(f"Bing: Item {i+1} - Including LinkedIn URL with unknown name: {link}")
                         else:
-                            self.logger.debug(f"Bing: Skipping non-LinkedIn URL: {link}")
+                            self.logger.debug(f"Bing: Item {i+1} - Skipping non-LinkedIn URL: {link}")
                     else:
-                        self.logger.debug("Bing: Skipping result with no link")
+                        self.logger.debug("Bing: Item {i+1} - Skipping result with no link")
                 except Exception as e:
-                    self.logger.warning(f"Error processing search result item: {e}")
+                    self.logger.warning(f"Bing: Item {i+1} - Error processing search result item: {e}")
                     continue  # skip malformed items
 
             self.logger.info(f"Bing search processed {len(result_items)} results, found {len(validated_results)} valid LinkedIn URLs")
 
             # Sort by similarity score (highest first)
-            validated_results.sort(key=lambda x: x[2], reverse=True)
+            # validated_results.sort(key=lambda x: x[2], reverse=True)
 
             # Extract just the URLs for backward compatibility
             links = [result[0] for result in validated_results]
 
             for l in links:
                 self.logger.debug(f"\t- {l}")
+
+            # If no results found and this was a quoted query, retry without quotes
+            if not links and quoted_query:
+                self.logger.info("No results found with quoted query, retrying without quotes...")
+                return self.run_bing_search(original_name, original_company, limit, threshold, quoted_query=False)
+
             return links
         except Exception as e:
             self.logger.error(f"Error running Bing search: {e}")
@@ -286,5 +309,5 @@ class BingSearch:
 if __name__ == "__main__":
     bing_search = BingSearch()
 
-    results = bing_search.run_bing_search("Steve Polenske", "Smart and Final Stores")
+    results = bing_search.run_bing_search("Magaly Romero", "Smart and Final Stores")
     print(results)

@@ -6,22 +6,34 @@ import inspect
 
 # Configure logging format
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-LOG_LEVEL = logging.INFO
+
+def get_log_level():
+    """Get the current log level based on DEBUG environment variable"""
+    if os.getenv('DEBUG', '').lower() in ('true', '1', 'yes', 'on'):
+        return logging.DEBUG
+    else:
+        return logging.INFO
 
 # Create logs directory if it doesn't exist
 logs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
 os.makedirs(logs_dir, exist_ok=True)
 
-# Configure file handler
-log_file = os.path.join(logs_dir, f'linkedin_scraper_{datetime.now().strftime("%Y%m%d")}.log')
-file_handler = logging.FileHandler(log_file)
-file_handler.setLevel(LOG_LEVEL)
-file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+def get_handlers():
+    """Get configured handlers with current log level"""
+    log_level = get_log_level()
 
-# Configure console handler
-console_handler = logging.StreamHandler()
-console_handler.setLevel(LOG_LEVEL)
-console_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+    # Configure file handler
+    log_file = os.path.join(logs_dir, f'linkedin_scraper_{datetime.now().strftime("%Y%m%d")}.log')
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+
+    # Configure console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(log_level)
+    console_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+
+    return file_handler, console_handler
 
 
 class Logger:
@@ -53,7 +65,8 @@ class Logger:
 
         # Only add handlers if they haven't been added already
         if not self._logger.handlers:
-            self._logger.setLevel(LOG_LEVEL)
+            self._logger.setLevel(get_log_level())
+            file_handler, console_handler = get_handlers()
             self._logger.addHandler(file_handler)
             self._logger.addHandler(console_handler)
 
@@ -87,6 +100,22 @@ def get_logger(name=None):
         Logger: A Logger instance
     """
     return Logger(name)
+
+def refresh_logger_levels():
+    """
+    Refresh the log level for all existing loggers based on current DEBUG environment variable.
+    This should be called after changing the DEBUG environment variable.
+    """
+    new_level = get_log_level()
+
+    # Get all existing loggers
+    for logger_name in logging.root.manager.loggerDict:
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(new_level)
+
+        # Update handlers for this logger
+        for handler in logger.handlers:
+            handler.setLevel(new_level)
 
 
 def log_function_call(func):
