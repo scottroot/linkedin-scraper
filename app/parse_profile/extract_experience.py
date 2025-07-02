@@ -300,10 +300,16 @@ def get_current_employer(
                                 logger.info(f"  Date: {position_info['date_range']}")
                                 logger.info(f"  Current: {position_info['is_current']}")
 
-                                # Only add if we found meaningful information and it's current
-                                if position_info['is_current'] and (position_info['job_title'] or position_info['company']):
+                                # Add positions that are either:
+                                # 1. Current positions with dates (is_current = True)
+                                # 2. Positions with company info but no dates (for "No dates listed" detection)
+                                if (position_info['is_current'] and (position_info['job_title'] or position_info['company'])) or \
+                                   (position_info['company'] and not position_info['date_range'] and (position_info['job_title'] or position_info['company'])):
                                     current_positions.append(position_info)
-                                    logger.info(f"  -> Added to current positions")
+                                    if position_info['is_current']:
+                                        logger.info(f"  -> Added to current positions (with dates)")
+                                    else:
+                                        logger.info(f"  -> Added to current positions (no dates)")
 
                             except Exception as e:
                                 logger.error(f"Error processing item {item_idx + 1}: {e}")
