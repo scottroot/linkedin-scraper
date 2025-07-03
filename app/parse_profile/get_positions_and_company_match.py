@@ -1,6 +1,7 @@
-import sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).parent.parent.parent))
+# import sys
+# from pathlib import Path
+# sys.path.append(str(Path(__file__).parent.parent.parent))
+
 from typing import Any, Dict, Literal
 from app.matching import analyze_positions_for_company_match
 from app.parse_profile.scrape_experience import get_all_positions

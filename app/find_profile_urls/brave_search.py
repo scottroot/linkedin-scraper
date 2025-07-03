@@ -58,20 +58,23 @@ NOT:
 
 
 """
-import sys
-sys.path.append("/Users/scomax/Documents/Git/linkedin-scraper")
-from app.matching import normalize_company_name
+# import sys
+# from pathlib import Path
+# sys.path.append(str(Path(__file__).parent.parent.parent))
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from typing import List, Literal, Optional, Tuple
 import requests
-from dotenv import load_dotenv
 import os
 import json
+
+from app.matching import normalize_company_name, score_fuzzy_match
 from app.logger import get_logger
-from difflib import SequenceMatcher
 
 
-load_dotenv()
+
 
 
 def brave_search(
@@ -266,10 +269,12 @@ class BraveSearch:
                         if " - " in clean_title:
                             clean_title = clean_title.split(" - ")[0].strip()
 
-                        similarity = SequenceMatcher(None, name.lower(), clean_title.lower()).ratio()
+                        # Use your custom fuzzy matching function
+                        match_result = score_fuzzy_match(name, clean_title, "person", threshold * 100)
+                        similarity = match_result['score'] / 100  # Convert to 0-1 scale for consistency
                         self.logger.debug(f"Comparing '{name}' with '{clean_title}' (similarity: {similarity:.2f})")
 
-                        if similarity >= threshold:
+                        if match_result['is_match']:
                             validated_results.append((result["url"], title, similarity))
                             self.logger.info(f"Brave: Valid match found - {title} (similarity: {similarity:.2f})")
                         else:
@@ -279,10 +284,12 @@ class BraveSearch:
                         url_parts = result["url"].split('/')
                         if len(url_parts) >= 5:
                             profile_name = url_parts[4].replace('-', ' ').replace('_', ' ')
-                            similarity = SequenceMatcher(None, name.lower(), profile_name.lower()).ratio()
+                            # Use your custom fuzzy matching function
+                            match_result = score_fuzzy_match(name, profile_name, "person", threshold * 100)
+                            similarity = match_result['score'] / 100  # Convert to 0-1 scale for consistency
                             self.logger.debug(f"Comparing '{name}' with '{profile_name}' from URL (similarity: {similarity:.2f})")
 
-                            if similarity >= threshold:
+                            if match_result['is_match']:
                                 validated_results.append((result["url"], profile_name, similarity))
                                 self.logger.info(f"Brave: Valid match found (from URL) - {profile_name} (similarity: {similarity:.2f})")
                             else:

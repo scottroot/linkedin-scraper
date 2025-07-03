@@ -1,5 +1,6 @@
-import sys
-sys.path.append("/Users/scomax/Documents/Git/linkedin-scraper/")
+# import sys
+# from pathlib import Path
+# sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from app.driver_and_login import get_driver, cleanup_driver
 from bs4 import BeautifulSoup
@@ -7,10 +8,10 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from app.logger import get_logger
+from app.matching import score_fuzzy_match
 import base64
 import time
 from urllib.parse import urlparse, parse_qs, unquote
-from difflib import SequenceMatcher
 
 
 class BingSearch:
@@ -214,10 +215,12 @@ class BingSearch:
                                     if " - " in clean_title:
                                         clean_title = clean_title.split(" - ")[0].strip()
 
-                                    similarity = SequenceMatcher(None, original_name.lower(), clean_title.lower()).ratio()
+                                    # Use your custom fuzzy matching function
+                                    match_result = score_fuzzy_match(original_name, clean_title, "person", threshold * 100)
+                                    similarity = match_result['score'] / 100  # Convert to 0-1 scale for consistency
                                     self.logger.info(f"Bing: Item {i+1} - Comparing '{original_name}' with '{clean_title}' (similarity: {similarity:.2f})")
 
-                                    if similarity >= threshold:
+                                    if match_result['is_match']:
                                         validated_results.append((real_url, title, similarity))
                                         self.logger.info(f"Bing: Item {i+1} - Valid LinkedIn match found - {title} (similarity: {similarity:.2f})")
                                     else:
@@ -228,10 +231,12 @@ class BingSearch:
                                     url_parts = real_url.split('/')
                                     if len(url_parts) >= 5:
                                         profile_name = url_parts[4].replace('-', ' ').replace('_', ' ')
-                                        similarity = SequenceMatcher(None, original_name.lower(), profile_name.lower()).ratio()
+                                        # Use your custom fuzzy matching function
+                                        match_result = score_fuzzy_match(original_name, profile_name, "person", threshold * 100)
+                                        similarity = match_result['score'] / 100  # Convert to 0-1 scale for consistency
                                         self.logger.debug(f"Bing: Item {i+1} - Comparing '{original_name}' with '{profile_name}' from URL (similarity: {similarity:.2f})")
 
-                                        if similarity >= threshold:
+                                        if match_result['is_match']:
                                             validated_results.append((real_url, profile_name, similarity))
                                             self.logger.info(f"Bing: Item {i+1} - Valid LinkedIn match found (from URL) - {profile_name} (similarity: {similarity:.2f})")
                                         else:
@@ -254,10 +259,12 @@ class BingSearch:
                                 if " - " in clean_title:
                                     clean_title = clean_title.split(" - ")[0].strip()
 
-                                similarity = SequenceMatcher(None, original_name.lower(), clean_title.lower()).ratio()
+                                # Use your custom fuzzy matching function
+                                match_result = score_fuzzy_match(original_name, clean_title, "person", threshold * 100)
+                                similarity = match_result['score'] / 100  # Convert to 0-1 scale for consistency
                                 self.logger.debug(f"Bing: Item {i+1} - Comparing '{original_name}' with '{clean_title}' (similarity: {similarity:.2f})")
 
-                                if similarity >= threshold:
+                                if match_result['is_match']:
                                     validated_results.append((link, title, similarity))
                                     self.logger.info(f"Bing: Item {i+1} - Valid LinkedIn match found - {title} (similarity: {similarity:.2f})")
                                 else:
@@ -268,10 +275,12 @@ class BingSearch:
                                 url_parts = link.split('/')
                                 if len(url_parts) >= 5:
                                     profile_name = url_parts[4].replace('-', ' ').replace('_', ' ')
-                                    similarity = SequenceMatcher(None, original_name.lower(), profile_name.lower()).ratio()
+                                    # Use your custom fuzzy matching function
+                                    match_result = score_fuzzy_match(original_name, profile_name, "person", threshold * 100)
+                                    similarity = match_result['score'] / 100  # Convert to 0-1 scale for consistency
                                     self.logger.debug(f"Bing: Item {i+1} - Comparing '{original_name}' with '{profile_name}' from URL (similarity: {similarity:.2f})")
 
-                                    if similarity >= threshold:
+                                    if match_result['is_match']:
                                         validated_results.append((link, profile_name, similarity))
                                         self.logger.info(f"Bing: Item {i+1} - Valid LinkedIn match found (from URL) - {profile_name} (similarity: {similarity:.2f})")
                                     else:

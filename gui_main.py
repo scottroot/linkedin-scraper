@@ -237,7 +237,7 @@ class LinkedInScraperGUI(QMainWindow):
         self.search_threshold_spin.setMinimum(0.1)
         self.search_threshold_spin.setMaximum(1.0)
         self.search_threshold_spin.setSingleStep(0.1)
-        self.search_threshold_spin.setValue(0.6)
+        self.search_threshold_spin.setValue(0.75)
         search_threshold_help = QLabel("(Bing/Brave search fuzzy match threshold)")
         advanced_layout.addWidget(search_threshold_label, 6, 0)
         advanced_layout.addWidget(self.search_threshold_spin, 6, 1)
