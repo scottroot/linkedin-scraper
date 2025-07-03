@@ -3,7 +3,9 @@ import os
 import threading
 import queue
 import chardet
-
+from dotenv import load_dotenv
+# Load environment variables
+load_dotenv()
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -19,6 +21,8 @@ import pandas as pd
 # Import the main processing functions
 from app.main import process_contacts_batch
 from app.logger import get_logger
+
+
 
 
 class MessageProcessor(QThread):

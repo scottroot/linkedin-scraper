@@ -1,22 +1,16 @@
 # This module takes company names found on LinkedIn and compares them to a target company name
 import os
-import re
 import time
 import gc
-from app.parse_profile import get_positions_and_company_match
-from app.parse_profile.extract_experience import get_current_employer
-from fuzzywuzzy import fuzz
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from dotenv import load_dotenv
+# Load environment variables
+load_dotenv()
+
+
 from app.driver_and_login import get_driver, login, cleanup_driver, health_check_driver
-from app.find_profile_urls import get_linkedin_url_candidates, BingSearch, BraveSearch
+from app.find_profile_urls import find_profile_urls_and_validate
 import pandas as pd
 from app.logger import get_logger
-from app.parse_profile.evaluate_company_match import normalize_company_name
-
-
 
 
 def process_one_contact(
@@ -64,7 +58,7 @@ def process_one_contact(
     """
     try:
         # Search and validate profiles with fallback logic
-        best_match = search_and_validate_profiles(
+        best_match, best_profile_url = find_profile_urls_and_validate(
             full_name=full_name,
             company_name=company_name,
             linkedin_driver=linkedin_driver,
@@ -80,14 +74,10 @@ def process_one_contact(
             early_exit_threshold=early_exit_threshold
         )
 
-        # Determine final result based on best match found
         if best_match:
-            # Extract the best match information
             company_match = best_match['company_match']
             best_match_info = company_match['any_match']
             best_score = best_match_info['match_result']['score']
-
-            # Determine if they are currently employed at the target company
             is_currently_employed = company_match['has_current_match']
 
             log(f"Search #{search_count} (Row {idx+1}): Best match found with score {best_score}")
@@ -97,6 +87,11 @@ def process_one_contact(
             # Update the Valid column - True if they currently work there, False if they worked there in the past
             contacts_df.at[idx, 'Valid'] = is_currently_employed
 
+            # Add the Profile URL to the DataFrame
+            if best_profile_url:
+                contacts_df.at[idx, 'Profile URL'] = best_profile_url
+                log(f"Search #{search_count} (Row {idx+1}): Profile URL recorded: {best_profile_url}")
+
             # Add note about historical match if applicable
             if not is_currently_employed and company_match['has_any_match']:
                 contacts_df.at[idx, 'Note'] = 'Historical match found'
@@ -104,10 +99,16 @@ def process_one_contact(
             log(f"Search #{search_count} (Row {idx+1}): No valid company matches found in any candidate profiles from either search")
             contacts_df.at[idx, 'Valid'] = False
             contacts_df.at[idx, 'Note'] = 'No company match found in any profile'
+            # Clear Profile URL if no match found
+            if 'Profile URL' in contacts_df.columns:
+                contacts_df.at[idx, 'Profile URL'] = ''
 
     except IndexError as e:
         log(f"Search #{search_count} (Row {idx+1}): Error: No LinkedIn profiles found for {full_name} at {company_name} (likely rate limited)")
         contacts_df.at[idx, 'Note'] = 'Profile not found - Maybe rate limited?'
+        # Clear Profile URL if there's an error
+        if 'Profile URL' in contacts_df.columns:
+            contacts_df.at[idx, 'Profile URL'] = ''
         # Force garbage collection after error
         gc.collect()
     except Exception as e:
@@ -115,6 +116,9 @@ def process_one_contact(
         log(f"Search #{search_count} (Row {idx+1}): Error type: {type(e).__name__}")
         # Mark as False if there's an error
         contacts_df.at[idx, 'Note'] = str(e)
+        # Clear Profile URL if there's an error
+        if 'Profile URL' in contacts_df.columns:
+            contacts_df.at[idx, 'Profile URL'] = ''
         # Force garbage collection after error
         gc.collect()
 
@@ -165,6 +169,10 @@ def process_contacts_batch(
     # Add Note column if it doesn't exist
     if 'Note' not in contacts_df.columns:
         contacts_df['Note'] = ''
+
+    # Add Profile URL column if it doesn't exist
+    if 'Profile URL' not in contacts_df.columns:
+        contacts_df['Profile URL'] = ''
 
     total_rows = len(contacts_df)
     log(f"Processing {total_rows} contacts in batches of {batch_size}")
@@ -311,181 +319,4 @@ def process_contacts_batch(
         gc.collect()
 
 
-def search_and_validate_profiles(
-    full_name,
-    company_name,
-    linkedin_driver,
-    bing_driver,
-    search_count,
-    idx,
-    log,
-    max_candidates=3,
-    search_threshold=0.6,
-    linkedin_threshold=75,
-    linkedin_timeout=15,
-    bing_timeout=20,
-    early_exit_threshold=85
-):
-    """
-    Search for profiles using Bing first, then Brave if no valid matches found.
-    Returns the best match found or None if no valid matches.
-    """
-    # Step 1: Try Bing search first
-    log(f"Search #{search_count} (Row {idx+1}): Starting Bing search for {full_name} at {company_name}")
 
-    url_candidates = get_linkedin_url_candidates(
-        name=full_name,
-        company=company_name,
-        driver=bing_driver,
-        limit=max_candidates,
-        threshold=search_threshold,
-        bing_timeout=bing_timeout
-    )
-
-    if url_candidates:
-        log(f"Search #{search_count} (Row {idx+1}): Bing found {len(url_candidates)} candidates")
-
-        # Validate Bing candidates
-        best_match = validate_profile_candidates(
-            url_candidates,
-            full_name,
-            company_name,
-            linkedin_driver,
-            search_count,
-            idx,
-            log,
-            linkedin_threshold,
-            linkedin_timeout,
-            early_exit_threshold,
-            search_source="Bing"
-        )
-
-        if best_match:
-            log(f"Search #{search_count} (Row {idx+1}): Valid match found from Bing search")
-            return best_match
-        else:
-            log(f"Search #{search_count} (Row {idx+1}): No valid matches from Bing candidates, trying Brave search")
-    else:
-        log(f"Search #{search_count} (Row {idx+1}): Bing search returned no candidates, trying Brave search")
-
-    # Step 2: Try Brave search if Bing failed or returned no valid matches
-    log(f"Search #{search_count} (Row {idx+1}): Starting Brave search for {full_name} at {company_name}")
-
-    clean_company = normalize_company_name(company_name)
-    brave_search_instance = BraveSearch()
-    brave_results = brave_search_instance.run_brave_search(
-        full_name,
-        clean_company,
-        limit=max_candidates,
-        threshold=search_threshold
-    )
-
-    if brave_results:
-        # Extract URLs from Brave results
-        brave_urls = [result[0] for result in brave_results]
-        log(f"Search #{search_count} (Row {idx+1}): Brave found {len(brave_urls)} candidates")
-
-        # Validate Brave candidates
-        best_match = validate_profile_candidates(
-            brave_urls,
-            full_name,
-            company_name,
-            linkedin_driver,
-            search_count,
-            idx,
-            log,
-            linkedin_threshold,
-            linkedin_timeout,
-            early_exit_threshold,
-            search_source="Brave"
-        )
-
-        if best_match:
-            log(f"Search #{search_count} (Row {idx+1}): Valid match found from Brave search")
-            return best_match
-        else:
-            log(f"Search #{search_count} (Row {idx+1}): No valid matches from Brave candidates either")
-    else:
-        log(f"Search #{search_count} (Row {idx+1}): Brave search returned no candidates")
-
-    # No valid matches found from either search
-    log(f"Search #{search_count} (Row {idx+1}): No valid matches found from either Bing or Brave search")
-    return None
-
-
-def validate_profile_candidates(
-    url_candidates,
-    full_name,
-    company_name,
-    linkedin_driver,
-    search_count,
-    idx,
-    log,
-    linkedin_threshold,
-    linkedin_timeout,
-    early_exit_threshold,
-    search_source="Unknown"
-):
-    """
-    Validate a list of profile candidates and return the best match.
-    """
-    best_match = None
-    best_score = 0
-    best_profile_url = None
-    found_good_match = False
-
-    for i, profile_url in enumerate(url_candidates):
-        try:
-            log(f"Search #{search_count} (Row {idx+1}): Checking {search_source} candidate {i+1}/{len(url_candidates)}: {profile_url}")
-
-            # Check employment status using the shared driver
-            positions_and_company_match = get_positions_and_company_match(
-                driver=linkedin_driver,
-                profile_url=profile_url,
-                target_company=company_name,
-                threshold=linkedin_threshold,
-                verbose=False,
-                timeout=linkedin_timeout
-            )
-
-            # Check if this profile has a company match (current or historical)
-            company_match = positions_and_company_match['company_match']
-
-            if company_match['has_any_match']:
-                # Get the best match score from this profile
-                best_match_info = company_match['any_match']
-                current_best_score = best_match_info['match_result']['score']
-
-                # Log the type of match found
-                match_type = "current position" if company_match['has_current_match'] else "historical position"
-                log(f"Search #{search_count} (Row {idx+1}): {search_source} candidate {i+1} has company match in {match_type} with score {current_best_score}")
-
-                # Update best match if this score is higher
-                if current_best_score > best_score:
-                    best_score = current_best_score
-                    best_match = positions_and_company_match
-                    best_profile_url = profile_url
-                    log(f"Search #{search_count} (Row {idx+1}): New best match found! Score: {best_score}")
-
-                # If we have a very good match (high confidence), stop checking other candidates
-                if current_best_score >= early_exit_threshold:
-                    log(f"Search #{search_count} (Row {idx+1}): Found excellent match with score {current_best_score} - stopping search")
-                    found_good_match = True
-                    break
-            else:
-                log(f"Search #{search_count} (Row {idx+1}): {search_source} candidate {i+1} has no company match in any position")
-
-        except Exception as e:
-            log(f"Search #{search_count} (Row {idx+1}): Error checking {search_source} candidate {i+1}: {e}")
-            continue
-
-        # If we found a good match, stop checking other candidates
-        if found_good_match:
-            log(f"Search #{search_count} (Row {idx+1}): Stopping {search_source} candidate search early due to excellent match")
-            break
-
-    # Log if we checked all candidates
-    if not found_good_match and len(url_candidates) > 1:
-        log(f"Search #{search_count} (Row {idx+1}): Checked all {len(url_candidates)} {search_source} candidates")
-
-    return best_match

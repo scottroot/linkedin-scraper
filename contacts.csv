@@ -1,7 +1,7 @@
-First Name,Last Name,Account Name,Valid,Note
-Brittany,Koempel,Bloomberg,True,
-Anne Riley,Moffat,Bloomberg,True,
-Ian,Korovinsky,Bloomberg,False,Historical match found
-Sam,Brenner,Spotify,True,
-Anas,Hayajneh,AQ Network,,
-Megan,Chang,Williams-Sheppard,,
+First Name,Last Name,Account Name,Valid,Note,Profile URL
+Brittany,Koempel,Bloomberg,True,,https://www.linkedin.com/in/brittanykoempel
+Anne Riley,Moffat,Bloomberg,True,,https://www.linkedin.com/in/annerileymoffat
+Ian,Korovinsky,Bloomberg,False,Historical match found,https://www.linkedin.com/in/ian-korovinsky
+Sam,Brenner,Spotify,True,,https://www.linkedin.com/in/frenzel-sam
+Anas,Hayajneh,AQ Network,False,Historical match found,https://ca.linkedin.com/in/anas-hayajneh
+Megan,Chang,Williams-Sheppard,False,No company match found in any profile,

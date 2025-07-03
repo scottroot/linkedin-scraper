@@ -58,6 +58,10 @@ NOT:
 
 
 """
+import sys
+sys.path.append("/Users/scomax/Documents/Git/linkedin-scraper")
+from app.matching import normalize_company_name
+
 from typing import List, Literal, Optional, Tuple
 import requests
 from dotenv import load_dotenv
@@ -176,6 +180,8 @@ def brave_search(
         params=params
     ).json()
 
+
+
     response_query = response["query"]
 
     response_results = []
@@ -220,14 +226,20 @@ class BraveSearch:
             search_query = f'site:linkedin.com/in "{name}" "{company}"'
 
             # Perform Brave search
+            self.logger.debug(f"Brave search query: {search_query}")
             results = brave_search(
                 query=search_query,
                 count=limit,
                 result_filter="web"
             )
 
+            self.logger.debug(f"Brave search returned {len(results)} raw results")
+            for i, result in enumerate(results):
+                self.logger.debug(f"Raw result {i+1}: {result}")
+
             validated_results = []
             for result in results:
+                self.logger.debug(f"Processing result: {result.get('title', 'No title')} - {result.get('url', 'No URL')}")
                 if "linkedin.com/in/" in result.get("url", ""):
                     title = result.get("title", "")
 
@@ -293,16 +305,26 @@ class BraveSearch:
 
 if __name__ == "__main__":
     # Example usage:
-    NAME = "Ian Korovinsky"
+    NAME = "Anas Hayajneh"
 
-    COMPANY = "Bloomberg"
+    COMPANY = "aq network"
 
-    query = f'site:linkedin.com "{NAME}" {COMPANY}'
-    results = brave_search(
-        query,
-        # spellcheck=False,
-        result_filter="web"
-        # country="mx",
+    query = f'site:linkedin.com/in "{NAME}" {COMPANY}'
+    # results = brave_search(
+    #     query,
+    #     # spellcheck=False,
+    #     result_filter="web"
+    #     # country="mx",
+    # )
+    # print(json.dumps(results, indent=4))
+
+    normalized_company_name = normalize_company_name(COMPANY)
+
+    brave_search_instance = BraveSearch()
+    brave_results = brave_search_instance.run_brave_search(
+        NAME,
+        normalized_company_name,
+        limit=5,
+        threshold=0.6
     )
-    print(json.dumps(results, indent=4))
-
+    print(json.dumps(brave_results, indent=4))
