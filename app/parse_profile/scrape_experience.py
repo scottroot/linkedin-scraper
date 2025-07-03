@@ -1,6 +1,6 @@
-# import sys
-# from pathlib import Path
-# sys.path.append(str(Path(__file__).parent.parent.parent))
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent.parent))
 
 import os
 import time
@@ -39,6 +39,16 @@ def find_experience_section(driver, timeout=10):
 
             # Additional wait for dynamic content to load
             time.sleep(2 + attempt)  # Progressive delay: 2s, 3s, 4s
+
+            # Scroll down the page to ensure experience section is loaded and visible
+            logger.info("Scrolling down to load experience section...")
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight/3);")
+            time.sleep(1)
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
+            time.sleep(1)
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight*2/3);")
+            time.sleep(1)
+
 
             artdeco_sections = driver.find_elements(By.CSS_SELECTOR, "section.artdeco-card")
             logger.info(f"Found {len(artdeco_sections)} artdeco-card sections")
